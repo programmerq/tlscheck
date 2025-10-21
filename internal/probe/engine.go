@@ -134,9 +134,9 @@ func classifyDialError(err error) string {
 		if ne.Timeout() {
 			return "timeout"
 		}
-		if ne.Temporary() {
-			return "handshake_failed"
-		}
+		// net.Error.Temporary is deprecated and no longer reliable for
+		// classifying errors. Prefer explicit checks for known error types
+		// if we need to add more buckets in the future.
 	}
 	return "proxy_connect_failed"
 }
