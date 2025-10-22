@@ -34,3 +34,5 @@ Run `go test ./...` for the fast unit suite. The [testing strategy](docs/testing
 will expand coverage with TLS failure injection and future integration checks. Unit coverage now
 includes discovery of Teleport profiles, `/webapi/ping` lookups, and TLS probe execution with
 in-memory certificates so handshake, ALPN mismatch, and failure classifications stay regression-free.
+The same document outlines a short manual validation loop for exercising the tool against a real
+Teleport cluster before the full integration harness is in place.

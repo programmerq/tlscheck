@@ -5,6 +5,8 @@ The following layers ensure we can iterate safely while surfacing regressions qu
 
 ## Unit Tests
 
+Current coverage focuses on locking in the behaviours that feed the probe engine:
+
 * `internal/config` – table-driven coverage for argument parsing, proxy detection, and service
   filtering. These tests validate defaults such as repeat counts and ensure flag changes do not
   silently break backwards compatibility.
@@ -12,12 +14,13 @@ The following layers ensure we can iterate safely while surfacing regressions qu
   notes for each Teleport version band. These tests pin behaviour such as the base16 cluster hint
   and the WebSocket-only transition in v18+.
 * `internal/probe` – TLS harnesses that spin up in-memory listeners. They now confirm that asking
-  for `teleport.example.com` via SNI returns a leaf certificate for the same host, and classify
-  ALPN mismatches and handshake failures without touching external networks.
+  for `teleport.example.com` via SNI returns a leaf certificate for the same host, record negotiated
+  ALPN values, and classify handshake failures, ALPN mismatches, and dial failures without touching
+  external networks.
 
-Unit tests will grow to include serialization helpers, SNI/ALPN builders, and any future resolvers.
-Mocks in this layer remain simple structs so that higher-level probe tests can inject synthetic
-failures without bringing up full network stacks.
+As we extend the implementation, unit tests will grow to include serialization helpers,
+SNI/ALPN builders, and any future resolvers. Mocks in this layer remain simple structs so that
+higher-level probe tests can inject synthetic failures without bringing up full network stacks.
 
 ## Probe Engine Tests
 
@@ -45,6 +48,23 @@ proxy reporting remains accurate.
 
 Until the integration environment exists, we will simulate a subset locally using `minica`-issued
 certificates and lightweight Go servers that implement the Teleport upgrade contract endpoints.
+
+### Manual validation steps
+
+Before the automated environment is online, we can still exercise the tool against a real cluster
+while minimising risk:
+
+1. Use `tsh login` to ensure a fresh profile exists under `$TELEPORT_HOME` (or `~/.tsh`). The CLI
+   will pick up the `current-profile` pointer automatically.
+2. Run `go run ./cmd/tlscheck --services proxy_web --repeat 1` to inspect the JSON plan and verify
+   that the discovered proxy address, cluster name, and Teleport version match expectations.
+3. Capture a baseline by running the probe engine against a known-good Teleport environment while
+   tailing proxy logs. Confirm that the recorded negotiated protocol, certificate subject, and ALPN
+   match the server output.
+4. Introduce controlled failures (for example, point DNS at an endpoint serving an invalid
+   certificate) and confirm that the JSON results land in the correct failure buckets. These manual
+   checks mirror the synthetic failures already covered in unit tests and provide confidence before
+   wider rollout.
 
 ## Failure Injection Helpers
 
