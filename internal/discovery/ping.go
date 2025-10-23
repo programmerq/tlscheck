@@ -20,6 +20,13 @@ type ProxySettings struct {
 type PingInfo struct {
 	ClusterName   string
 	ServerVersion string
+	Proxy         ProxyInfo
+}
+
+// ProxyInfo describes the proxy configuration surfaced by /webapi/ping.
+type ProxyInfo struct {
+	WebProxyPublicAddr string
+	TLSRoutingEnabled  bool
 }
 
 // FetchClusterInfo retrieves cluster metadata from the proxy's /webapi/ping endpoint.
@@ -57,6 +64,13 @@ func FetchClusterInfo(ctx context.Context, publicAddr string, proxy ProxySetting
 	info := PingInfo{
 		ClusterName:   strings.TrimSpace(payload.ClusterName),
 		ServerVersion: strings.TrimSpace(payload.ServerVersion),
+	}
+
+	if payload.Proxy != nil {
+		info.Proxy.TLSRoutingEnabled = payload.Proxy.TLSRoutingEnabled
+		if payload.Proxy.SSH != nil {
+			info.Proxy.WebProxyPublicAddr = strings.TrimSpace(payload.Proxy.SSH.PublicAddr)
+		}
 	}
 
 	if info.ClusterName == "" {
@@ -137,6 +151,16 @@ func parseProxyURL(raw string) *url.URL {
 }
 
 type pingResponse struct {
-	ClusterName   string `json:"cluster_name"`
-	ServerVersion string `json:"server_version"`
+	ClusterName   string        `json:"cluster_name"`
+	ServerVersion string        `json:"server_version"`
+	Proxy         *proxySection `json:"proxy"`
+}
+
+type proxySection struct {
+	TLSRoutingEnabled bool             `json:"tls_routing_enabled"`
+	SSH               *sshProxySection `json:"ssh"`
+}
+
+type sshProxySection struct {
+	PublicAddr string `json:"public_addr"`
 }

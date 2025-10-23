@@ -35,12 +35,13 @@ func TestEngineHandshakeSuccess(t *testing.T) {
 		Port:            port,
 		PrimarySNI:      "teleport.example.com",
 		ALPNs:           []string{"h2", "http/1.1"},
+		Trust:           plan.TrustSystemRoots,
 		Repeat:          1,
 		UpgradeSequence: nil,
 	}
 
 	engine := NewEngine()
-	engine.RootCAs = pool
+	engine.systemRoots = pool
 
 	probePlan := plan.Plan{Targets: []plan.ProbeTarget{target}}
 	results, err := engine.Run(context.Background(), probePlan)
@@ -63,6 +64,12 @@ func TestEngineHandshakeSuccess(t *testing.T) {
 	if res.LeafSubject != "CN=teleport.example.com" {
 		t.Fatalf("LeafSubject = %q, want CN=teleport.example.com", res.LeafSubject)
 	}
+	if res.LeafIssuer != "CN=tlscheck test ca" {
+		t.Fatalf("LeafIssuer = %q, want CN=tlscheck test ca", res.LeafIssuer)
+	}
+	if len(res.LeafSANs) != 1 || res.LeafSANs[0] != "teleport.example.com" {
+		t.Fatalf("LeafSANs = %#v, want [teleport.example.com]", res.LeafSANs)
+	}
 }
 
 func TestEngineALPNMismatch(t *testing.T) {
@@ -82,10 +89,11 @@ func TestEngineALPNMismatch(t *testing.T) {
 		Port:       port,
 		PrimarySNI: "cluster.example.com",
 		ALPNs:      []string{"h2"},
+		Trust:      plan.TrustSystemRoots,
 	}
 
 	engine := NewEngine()
-	engine.RootCAs = pool
+	engine.systemRoots = pool
 
 	probePlan := plan.Plan{Targets: []plan.ProbeTarget{target}}
 	results, err := engine.Run(context.Background(), probePlan)
@@ -121,6 +129,115 @@ func TestEngineHandshakeFailure(t *testing.T) {
 	}
 	if results[0].Failure == nil || results[0].Failure.Kind != "handshake_failed" {
 		t.Fatalf("expected handshake_failed, got %#v", results[0].Failure)
+	}
+}
+
+func TestEngineReportsUntrustedCertWithDetails(t *testing.T) {
+	t.Parallel()
+
+	cert, _ := generateServerCert(t, "untrusted.example.com")
+	addr, cleanup := startTLSServer(t, &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		NextProtos:   []string{"h2"},
+	}, nil)
+	t.Cleanup(cleanup)
+
+	host, port := splitHostPort(t, addr)
+	target := plan.ProbeTarget{
+		ServiceKey: "proxy_web",
+		Address:    host,
+		Port:       port,
+		PrimarySNI: "untrusted.example.com",
+		ALPNs:      []string{"h2"},
+		Trust:      plan.TrustSystemRoots,
+	}
+
+	engine := NewEngine()
+	engine.systemRoots = x509.NewCertPool() // empty so verification fails
+
+	probePlan := plan.Plan{Targets: []plan.ProbeTarget{target}}
+	results, err := engine.Run(context.Background(), probePlan)
+	if err != nil {
+		t.Fatalf("engine.Run returned error: %v", err)
+	}
+	res := results[0]
+	if res.Failure == nil || res.Failure.Kind != "untrusted_cert" {
+		t.Fatalf("expected untrusted_cert failure, got %#v", res.Failure)
+	}
+	if res.LeafFingerprint == "" || res.LeafSubject == "" {
+		t.Fatalf("expected certificate metadata to be captured on failure")
+	}
+	if len(res.LeafSANs) == 0 || res.LeafSANs[0] != "untrusted.example.com" {
+		t.Fatalf("expected SANs to include leaf DNS name, got %#v", res.LeafSANs)
+	}
+}
+
+func TestEngineHonorsHostCATrust(t *testing.T) {
+	t.Parallel()
+
+	cert, hostPool := generateServerCert(t, "teleport.example.com")
+	addr, cleanup := startTLSServer(t, &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		NextProtos:   []string{"teleport-proxy-ssh"},
+	}, nil)
+	t.Cleanup(cleanup)
+
+	host, port := splitHostPort(t, addr)
+	target := plan.ProbeTarget{
+		ServiceKey: "proxy_ssh",
+		Address:    host,
+		Port:       port,
+		PrimarySNI: "teleport.example.com",
+		ALPNs:      []string{"teleport-proxy-ssh"},
+		Trust:      plan.TrustHostCA,
+	}
+
+	engine := NewEngine()
+	engine.RootCAs = hostPool
+	engine.systemRoots = x509.NewCertPool() // ensure system trust alone would fail
+
+	probePlan := plan.Plan{Targets: []plan.ProbeTarget{target}}
+	results, err := engine.Run(context.Background(), probePlan)
+	if err != nil {
+		t.Fatalf("engine.Run returned error: %v", err)
+	}
+	if results[0].Failure != nil {
+		t.Fatalf("expected success, got failure %#v", results[0].Failure)
+	}
+}
+
+func TestEngineRequiresHostCABundle(t *testing.T) {
+	t.Parallel()
+
+	cert, _ := generateServerCert(t, "teleport.example.com")
+	addr, cleanup := startTLSServer(t, &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		NextProtos:   []string{"teleport-proxy-ssh"},
+	}, nil)
+	t.Cleanup(cleanup)
+
+	host, port := splitHostPort(t, addr)
+	target := plan.ProbeTarget{
+		ServiceKey: "proxy_ssh",
+		Address:    host,
+		Port:       port,
+		PrimarySNI: "teleport.example.com",
+		ALPNs:      []string{"teleport-proxy-ssh"},
+		Trust:      plan.TrustHostCA,
+	}
+
+	engine := NewEngine()
+	engine.RootCAs = nil
+	engine.systemRoots = x509.NewCertPool()
+
+	probePlan := plan.Plan{Targets: []plan.ProbeTarget{target}}
+	results, err := engine.Run(context.Background(), probePlan)
+	if err != nil {
+		t.Fatalf("engine.Run returned error: %v", err)
+	}
+	res := results[0]
+	if res.Failure == nil || res.Failure.Kind != "host_ca_unavailable" {
+		t.Fatalf("expected host_ca_unavailable failure, got %#v", res.Failure)
 	}
 }
 

@@ -8,7 +8,7 @@
 | Reverse tunnel (client/agent testing proxy’s tunnel entry) | 3024 | Public cluster DNS (probe raw IP with identical SNI) | teleport-reversetunnel | Same upgrade behavior (WebSocket preferred ≥15.1; legacy `alpn`/`alpn-ping` acceptable only <18). |
 | Proxy SSH (tsh→proxy for node SSH) | 3023 | Public cluster DNS (include base16-encoded internal SNI variant when dialing raw IP) | teleport-proxy-ssh | Same upgrade behavior as above. |
 | Proxy SSH-gRPC (internal SSH over gRPC transport via proxy) | — | Public cluster DNS | teleport-proxy-ssh-grpc (negotiates h2) | Same upgrade behavior as above. |
-| Auth via Proxy (tsh or agents dialing Auth through proxy) | (Auth gRPC is 3025; clients use proxy via TLS routing) | teleport-auth@<cluster-name> (then h2) | teleport-auth@<cluster-name> | Same upgrade behavior as above. |
+| Auth via Proxy (tsh or agents dialing Auth through proxy) | (Auth gRPC is 3025; clients use proxy via TLS routing) | <base16-cluster>.teleport.cluster.local | teleport-auth@<base16-cluster>.teleport.cluster.local,h2 | Same upgrade behavior as above. |
 | Kubernetes API via Proxy | 3026 | kube-teleport-proxy-alpn.<cluster-name> (special SNI prefix) | h2,http/1.1 | Same upgrade behavior; L7-compatible TLS routing introduced in 13+, relevant in 15–18. |
 | Databases via Proxy (tsh upstream hop) | Split listeners: Postgres 5432, MySQL 3036, MongoDB 27017, Redis 6379 | Public cluster DNS | Upstream ALPN supplied by `tsh` | Same upgrade behavior; harness dials ALPN path explicitly. |
 | App Access (HTTP apps) | Multiplexed on web | Public cluster DNS | h2,http/1.1 | Same upgrade behavior. |

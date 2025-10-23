@@ -15,9 +15,15 @@ func TestFetchClusterInfo(t *testing.T) {
 		if r.URL.Path != "/webapi/ping" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		payload := map[string]string{
+		payload := map[string]any{
 			"cluster_name":   "root.example.com",
 			"server_version": "v17.3.2",
+			"proxy": map[string]any{
+				"tls_routing_enabled": false,
+				"ssh": map[string]any{
+					"public_addr": "root.example.com:443",
+				},
+			},
 		}
 		if err := json.NewEncoder(w).Encode(payload); err != nil {
 			t.Fatalf("failed to encode payload: %v", err)
@@ -35,5 +41,11 @@ func TestFetchClusterInfo(t *testing.T) {
 	}
 	if info.ServerVersion != "v17.3.2" {
 		t.Fatalf("ServerVersion = %q, want v17.3.2", info.ServerVersion)
+	}
+	if info.Proxy.WebProxyPublicAddr != "root.example.com:443" {
+		t.Fatalf("WebProxyPublicAddr = %q, want root.example.com:443", info.Proxy.WebProxyPublicAddr)
+	}
+	if info.Proxy.TLSRoutingEnabled {
+		t.Fatal("expected TLSRoutingEnabled to be false")
 	}
 }
