@@ -10,13 +10,16 @@ import (
 
 // Options captures runtime inputs supplied via the CLI.
 type Options struct {
-	PublicAddr      string        `json:"public_addr"`
-	ClusterName     string        `json:"cluster_name"`
-	TeleportVersion string        `json:"teleport_version"`
-	Repeat          int           `json:"repeat"`
-	ServiceFilter   []string      `json:"service_filter,omitempty"`
-	Proxy           ProxySettings `json:"proxy"`
-	ProfileSource   *ProfileInfo  `json:"profile_source,omitempty"`
+	PublicAddr        string        `json:"public_addr"`
+	ClusterName       string        `json:"cluster_name"`
+	TeleportVersion   string        `json:"teleport_version"`
+	WebProxyPort      int           `json:"web_proxy_port,omitempty"`
+	TLSRoutingEnabled bool          `json:"tls_routing_enabled"`
+	Repeat            int           `json:"repeat"`
+	ServiceFilter     []string      `json:"service_filter,omitempty"`
+	Proxy             ProxySettings `json:"proxy"`
+	ProfileSource     *ProfileInfo  `json:"profile_source,omitempty"`
+	HostCAPEM         []byte        `json:"-"`
 }
 
 // ProxySettings captures HTTP(S) proxy configuration sourced from the environment.

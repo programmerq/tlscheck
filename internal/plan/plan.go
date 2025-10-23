@@ -21,17 +21,29 @@ type Plan struct {
 
 // ProbeTarget represents a specific (port, SNI, ALPN) combination to execute.
 type ProbeTarget struct {
-	ServiceKey      string           `json:"service_key"`
-	DisplayName     string           `json:"display_name"`
-	Address         string           `json:"address"`
-	Port            int              `json:"port"`
-	PrimarySNI      string           `json:"primary_sni"`
-	AdditionalSNIs  []string         `json:"additional_snis,omitempty"`
-	ALPNs           []string         `json:"alpns"`
-	UpgradeSequence []UpgradeAttempt `json:"upgrade_sequence"`
-	Repeat          int              `json:"repeat"`
-	Notes           []string         `json:"notes,omitempty"`
+	ServiceKey        string           `json:"service_key"`
+	DisplayName       string           `json:"display_name"`
+	Address           string           `json:"address"`
+	Port              int              `json:"port"`
+	PrimarySNI        string           `json:"primary_sni"`
+	AdditionalSNIs    []string         `json:"additional_snis,omitempty"`
+	ALPNs             []string         `json:"alpns"`
+	UpgradeSequence   []UpgradeAttempt `json:"upgrade_sequence"`
+	Trust             TrustStrategy    `json:"trust"`
+	InformationalOnly bool             `json:"informational_only,omitempty"`
+	Repeat            int              `json:"repeat"`
+	Notes             []string         `json:"notes,omitempty"`
 }
+
+// TrustStrategy describes which certificate authorities should be trusted for a probe target.
+type TrustStrategy string
+
+const (
+	// TrustSystemRoots relies on the operating system certificate store.
+	TrustSystemRoots TrustStrategy = "system"
+	// TrustHostCA relies on the Teleport host CA bundle discovered at runtime.
+	TrustHostCA TrustStrategy = "host_ca"
+)
 
 // UpgradeAttempt documents the sequence of Upgrade headers to send behind L7 load balancers.
 type UpgradeAttempt struct {
@@ -87,22 +99,33 @@ func Build(opts config.Options) (Plan, error) {
 }
 
 type serviceTemplate struct {
-	Key          string
-	DisplayName  string
-	Ports        []int
-	ALPNs        func(config.Options) []string
-	SNIs         func(config.Options) (string, []string)
-	Notes        []string
-	NeedsUpgrade bool
-	Base16Hint   bool
+	Key           string
+	DisplayName   string
+	Ports         func(config.Options) []int
+	ALPNs         func(config.Options, string) []string
+	SNIs          func(config.Options, string) (string, []string)
+	Notes         []string
+	NeedsUpgrade  bool
+	Base16Hint    bool
+	Informational func(config.Options) bool
+	Trust         TrustStrategy
 }
 
 func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq []UpgradeAttempt) []ProbeTarget {
-	alpns := t.ALPNs(opts)
-	primarySNI, additionalSNIs := t.SNIs(opts)
+	alpns := t.ALPNs(opts, base16Name)
+	primarySNI, additionalSNIs := t.SNIs(opts, base16Name)
 
-	targets := make([]ProbeTarget, 0, len(t.Ports))
-	for _, port := range t.Ports {
+	ports := t.Ports(opts)
+	if len(ports) == 0 {
+		return nil
+	}
+
+	targets := make([]ProbeTarget, 0, len(ports))
+	trust := t.Trust
+	if trust == "" {
+		trust = TrustSystemRoots
+	}
+	for _, port := range ports {
 		target := ProbeTarget{
 			ServiceKey:     t.Key,
 			DisplayName:    t.DisplayName,
@@ -111,12 +134,18 @@ func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq
 			PrimarySNI:     primarySNI,
 			AdditionalSNIs: cloneSlice(additionalSNIs),
 			ALPNs:          cloneSlice(alpns),
+			Trust:          trust,
 			Repeat:         opts.Repeat,
 			Notes:          cloneSlice(t.Notes),
 		}
 
 		if t.NeedsUpgrade {
 			target.UpgradeSequence = cloneUpgrades(seq)
+		}
+
+		if t.Informational != nil && t.Informational(opts) {
+			target.InformationalOnly = true
+			target.Notes = append(target.Notes, "TLS routing disabled; treating probe outcome as informational only.")
 		}
 
 		targets = append(targets, target)
@@ -153,11 +182,11 @@ var serviceTemplates = []serviceTemplate{
 	{
 		Key:         "proxy_web",
 		DisplayName: "Proxy Web UI & HTTPS API",
-		Ports:       []int{3080, 443},
-		ALPNs: func(config.Options) []string {
+		Ports:       webPortList,
+		ALPNs: func(config.Options, string) []string {
 			return []string{"h2", "http/1.1"}
 		},
-		SNIs: func(opts config.Options) (string, []string) {
+		SNIs: func(opts config.Options, _ string) (string, []string) {
 			return opts.PublicAddr, nil
 		},
 		Notes: []string{
@@ -168,161 +197,201 @@ var serviceTemplates = []serviceTemplate{
 	{
 		Key:         "reverse_tunnel",
 		DisplayName: "Reverse tunnel entry",
-		Ports:       []int{3024},
-		ALPNs: func(config.Options) []string {
+		Ports:       webPortList,
+		ALPNs: func(config.Options, string) []string {
 			return []string{"teleport-reversetunnel"}
 		},
-		SNIs: func(opts config.Options) (string, []string) {
+		SNIs: func(opts config.Options, _ string) (string, []string) {
 			return opts.PublicAddr, nil
 		},
 		Notes: []string{
 			"Probe direct IPs returned for the proxy host as well",
 		},
-		NeedsUpgrade: true,
-		Base16Hint:   true,
+		Base16Hint:    true,
+		Informational: informationalWhenSeparateListeners,
 	},
 	{
 		Key:         "proxy_ssh",
 		DisplayName: "Proxy SSH",
-		Ports:       []int{3023},
-		ALPNs: func(config.Options) []string {
+		Ports:       webPortList,
+		ALPNs: func(config.Options, string) []string {
 			return []string{"teleport-proxy-ssh"}
 		},
-		SNIs: func(opts config.Options) (string, []string) {
+		SNIs: func(opts config.Options, _ string) (string, []string) {
 			return opts.PublicAddr, nil
 		},
 		Notes: []string{
 			"Include base16 cluster SNI when dialing resolved IPs",
 		},
-		NeedsUpgrade: true,
-		Base16Hint:   true,
+		Base16Hint:    true,
+		Informational: informationalWhenSeparateListeners,
+		Trust:         TrustHostCA,
 	},
 	{
 		Key:         "proxy_ssh_grpc",
 		DisplayName: "Proxy SSH gRPC",
-		Ports:       []int{3023},
-		ALPNs: func(config.Options) []string {
+		Ports:       webPortList,
+		ALPNs: func(config.Options, string) []string {
 			return []string{"teleport-proxy-ssh-grpc"}
 		},
-		SNIs: func(opts config.Options) (string, []string) {
+		SNIs: func(opts config.Options, _ string) (string, []string) {
 			return opts.PublicAddr, nil
 		},
-		NeedsUpgrade: true,
+		Informational: informationalWhenSeparateListeners,
+		Trust:         TrustHostCA,
 	},
 	{
 		Key:         "auth_via_proxy",
 		DisplayName: "Auth via proxy",
-		Ports:       []int{3025},
-		ALPNs: func(opts config.Options) []string {
-			return []string{fmt.Sprintf("teleport-auth@%s", opts.ClusterName)}
+		Ports:       webPortList,
+		ALPNs: func(opts config.Options, base16 string) []string {
+			authALPN := makeAuthALPN(base16)
+			if authALPN == "" {
+				return []string{"h2"}
+			}
+			return []string{authALPN, "h2"}
 		},
-		SNIs: func(opts config.Options) (string, []string) {
-			return opts.PublicAddr, nil
+		SNIs: func(opts config.Options, base16 string) (string, []string) {
+			authHost := makeBase16Host(base16)
+			if authHost == "" {
+				return opts.PublicAddr, nil
+			}
+			return authHost, nil
 		},
 		Notes: []string{
 			"Expect Host CA issued leaf cert with auth identity",
 		},
-		NeedsUpgrade: true,
+		Informational: informationalWhenSeparateListeners,
+		Trust:         TrustHostCA,
 	},
 	{
 		Key:         "kubernetes",
 		DisplayName: "Kubernetes API via proxy",
-		Ports:       []int{3026},
-		ALPNs: func(config.Options) []string {
+		Ports:       webPortList,
+		ALPNs: func(config.Options, string) []string {
 			return []string{"h2", "http/1.1"}
 		},
-		SNIs: func(opts config.Options) (string, []string) {
+		SNIs: func(opts config.Options, _ string) (string, []string) {
 			return fmt.Sprintf("kube-teleport-proxy-alpn.%s", opts.ClusterName), []string{opts.PublicAddr}
 		},
-		NeedsUpgrade: true,
+		Informational: informationalWhenSeparateListeners,
+		Trust:         TrustHostCA,
 	},
 	{
 		Key:         "db_postgres",
 		DisplayName: "Database listener (Postgres)",
-		Ports:       []int{5432},
-		ALPNs: func(config.Options) []string {
+		Ports:       webPortList,
+		ALPNs: func(config.Options, string) []string {
 			return nil
 		},
-		SNIs: func(opts config.Options) (string, []string) {
+		SNIs: func(opts config.Options, _ string) (string, []string) {
 			return opts.PublicAddr, nil
 		},
 		Notes: []string{
 			"ALPN negotiated by tsh db proxy; harness verifies upstream reachability",
 		},
-		NeedsUpgrade: true,
+		Informational: informationalWhenSeparateListeners,
 	},
 	{
 		Key:         "db_mysql",
 		DisplayName: "Database listener (MySQL)",
-		Ports:       []int{3036},
-		ALPNs: func(config.Options) []string {
+		Ports:       webPortList,
+		ALPNs: func(config.Options, string) []string {
 			return nil
 		},
-		SNIs: func(opts config.Options) (string, []string) {
+		SNIs: func(opts config.Options, _ string) (string, []string) {
 			return opts.PublicAddr, nil
 		},
 		Notes: []string{
 			"ALPN negotiated by tsh db proxy; harness verifies upstream reachability",
 		},
-		NeedsUpgrade: true,
+		Informational: informationalWhenSeparateListeners,
 	},
 	{
 		Key:         "db_mongodb",
 		DisplayName: "Database listener (MongoDB)",
-		Ports:       []int{27017},
-		ALPNs: func(config.Options) []string {
+		Ports:       webPortList,
+		ALPNs: func(config.Options, string) []string {
 			return nil
 		},
-		SNIs: func(opts config.Options) (string, []string) {
+		SNIs: func(opts config.Options, _ string) (string, []string) {
 			return opts.PublicAddr, nil
 		},
 		Notes: []string{
 			"ALPN negotiated by tsh db proxy; harness verifies upstream reachability",
 		},
-		NeedsUpgrade: true,
+		Informational: informationalWhenSeparateListeners,
 	},
 	{
 		Key:         "db_redis",
 		DisplayName: "Database listener (Redis)",
-		Ports:       []int{6379},
-		ALPNs: func(config.Options) []string {
+		Ports:       webPortList,
+		ALPNs: func(config.Options, string) []string {
 			return nil
 		},
-		SNIs: func(opts config.Options) (string, []string) {
+		SNIs: func(opts config.Options, _ string) (string, []string) {
 			return opts.PublicAddr, nil
 		},
 		Notes: []string{
 			"ALPN negotiated by tsh db proxy; harness verifies upstream reachability",
 		},
-		NeedsUpgrade: true,
+		Informational: informationalWhenSeparateListeners,
 	},
 	{
 		Key:         "app_access",
 		DisplayName: "App Access",
-		Ports:       []int{3080, 443},
-		ALPNs: func(config.Options) []string {
+		Ports:       webPortList,
+		ALPNs: func(config.Options, string) []string {
 			return []string{"h2", "http/1.1"}
 		},
-		SNIs: func(opts config.Options) (string, []string) {
+		SNIs: func(opts config.Options, _ string) (string, []string) {
 			return opts.PublicAddr, nil
 		},
-		NeedsUpgrade: true,
+		Informational: informationalWhenSeparateListeners,
 	},
 	{
 		Key:         "desktop_access",
 		DisplayName: "Desktop Access",
-		Ports:       []int{3080, 443},
-		ALPNs: func(config.Options) []string {
+		Ports:       webPortList,
+		ALPNs: func(config.Options, string) []string {
 			return []string{"h2", "http/1.1"}
 		},
-		SNIs: func(opts config.Options) (string, []string) {
+		SNIs: func(opts config.Options, _ string) (string, []string) {
 			return opts.PublicAddr, nil
 		},
 		Notes: []string{
 			"Desktop Access uses gRPC over HTTP/2",
 		},
-		NeedsUpgrade: true,
+		Informational: informationalWhenSeparateListeners,
 	},
+}
+
+func webPortList(opts config.Options) []int {
+	port := opts.WebProxyPort
+	if port <= 0 {
+		port = 443
+	}
+	return []int{port}
+}
+
+func informationalWhenSeparateListeners(opts config.Options) bool {
+	return !opts.TLSRoutingEnabled
+}
+
+func makeBase16Host(base16 string) string {
+	base16 = strings.TrimSpace(base16)
+	if base16 == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s.teleport.cluster.local", base16)
+}
+
+func makeAuthALPN(base16 string) string {
+	base16 = strings.TrimSpace(base16)
+	if base16 == "" {
+		return ""
+	}
+	return fmt.Sprintf("teleport-auth@%s.teleport.cluster.local", base16)
 }
 
 // ServiceKeys returns the valid service identifiers that can be filtered via CLI flags.
