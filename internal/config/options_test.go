@@ -62,6 +62,16 @@ func TestParseArgsWithIPAddresses(t *testing.T) {
 			want: []string{"192.168.1.1", "10.0.0.1", "172.16.0.1"},
 		},
 		{
+			name: "IPv6 addresses",
+			args: []string{"--proxy-server", "example.com", "--ip-addresses", "2001:0db8:85a3:0000:0000:8a2e:0370:7334,::1,fe80::1"},
+			want: []string{"2001:0db8:85a3:0000:0000:8a2e:0370:7334", "::1", "fe80::1"},
+		},
+		{
+			name: "mixed IPv4 and IPv6",
+			args: []string{"--proxy-server", "example.com", "--ip-addresses", "192.168.1.1,2001:db8::1,10.0.0.1"},
+			want: []string{"192.168.1.1", "2001:db8::1", "10.0.0.1"},
+		},
+		{
 			name: "no IP addresses",
 			args: []string{"--proxy-server", "example.com"},
 			want: nil,
