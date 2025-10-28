@@ -49,7 +49,14 @@ func (e *Engine) SetRootCAs(pool *x509.CertPool) {
 type Result struct {
 	Target             plan.ProbeTarget `json:"target"`
 	Attempt            int              `json:"attempt"`
+	LocalAddr          string           `json:"local_addr,omitempty"`
 	RemoteAddr         string           `json:"remote_addr,omitempty"`
+	ResolvedIP         string           `json:"resolved_ip,omitempty"`
+	DialDuration       time.Duration    `json:"dial_duration_ms,omitempty"`
+	HandshakeDuration  time.Duration    `json:"handshake_duration_ms,omitempty"`
+	TotalDuration      time.Duration    `json:"total_duration_ms,omitempty"`
+	TLSVersion         string           `json:"tls_version,omitempty"`
+	CipherSuite        string           `json:"cipher_suite,omitempty"`
 	NegotiatedProtocol string           `json:"negotiated_protocol,omitempty"`
 	LeafSubject        string           `json:"leaf_subject,omitempty"`
 	LeafIssuer         string           `json:"leaf_issuer,omitempty"`
@@ -91,32 +98,75 @@ func (e *Engine) Run(ctx context.Context, p plan.Plan) ([]Result, error) {
 
 	results := make([]Result, 0)
 	for _, target := range p.Targets {
-		repeat := target.Repeat
-		if repeat <= 0 {
-			repeat = 1
+		// Resolve IPs if not already resolved
+		ips := target.ResolvedIPs
+		if len(ips) == 0 {
+			// Try to resolve the address
+			resolved, err := net.LookupIP(target.Address)
+			if err == nil && len(resolved) > 0 {
+				for _, ip := range resolved {
+					ips = append(ips, ip.String())
+				}
+			} else {
+				// If resolution fails, use the address as-is (might be an IP already)
+				ips = []string{target.Address}
+			}
 		}
-		for attempt := 1; attempt <= repeat; attempt++ {
-			res := e.probeOnce(ctx, target, attempt)
-			results = append(results, res)
+
+		// Probe each resolved IP
+		for _, ip := range ips {
+			ipTarget := target
+			ipTarget.Address = ip
+			if len(ips) > 1 {
+				ipTarget.Notes = append(cloneSlice(ipTarget.Notes), fmt.Sprintf("resolved to %s", ip))
+			}
+
+			repeat := ipTarget.Repeat
+			if repeat <= 0 {
+				repeat = 1
+			}
+			for attempt := 1; attempt <= repeat; attempt++ {
+				res := e.probeOnce(ctx, ipTarget, attempt)
+				results = append(results, res)
+			}
 		}
 	}
 	return results, nil
 }
 
+func cloneSlice(input []string) []string {
+	if len(input) == 0 {
+		return nil
+	}
+	out := make([]string, len(input))
+	copy(out, input)
+	return out
+}
+
 func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt int) Result {
+	startTime := time.Now()
 	res := Result{Target: target, Attempt: attempt}
 
 	dialCtx, cancel := context.WithTimeout(ctx, e.Timeout)
 	defer cancel()
 
 	addr := net.JoinHostPort(target.Address, fmt.Sprintf("%d", target.Port))
+	dialStart := time.Now()
 	conn, err := e.Dialer.DialContext(dialCtx, "tcp", addr)
+	dialEnd := time.Now()
+	res.DialDuration = dialEnd.Sub(dialStart)
 	if err != nil {
+		res.TotalDuration = time.Since(startTime)
 		res.Failure = &Failure{Kind: classifyDialError(err), Message: err.Error()}
 		return res
 	}
 	defer conn.Close()
 	res.RemoteAddr = conn.RemoteAddr().String()
+	res.LocalAddr = conn.LocalAddr().String()
+
+	if host, _, err := net.SplitHostPort(res.RemoteAddr); err == nil {
+		res.ResolvedIP = host
+	}
 
 	tlsCfg := &tls.Config{
 		ServerName:         target.PrimarySNI,
@@ -128,9 +178,13 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 	tlsConn := tls.Client(conn, tlsCfg)
 	defer tlsConn.Close()
 
+	handshakeStart := time.Now()
 	if err := tlsConn.HandshakeContext(dialCtx); err != nil {
+		res.HandshakeDuration = time.Since(handshakeStart)
+		res.TotalDuration = time.Since(startTime)
 		state := tlsConn.ConnectionState()
 		e.captureCertificateDetails(&res, state)
+		e.captureTLSDetails(&res, state)
 		kind := "handshake_failed"
 		if strings.Contains(err.Error(), "no application protocol") {
 			kind = "alpn_mismatch"
@@ -138,18 +192,22 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 		res.Failure = &Failure{Kind: kind, Message: err.Error()}
 		return res
 	}
+	res.HandshakeDuration = time.Since(handshakeStart)
 
 	state := tlsConn.ConnectionState()
 	res.NegotiatedProtocol = state.NegotiatedProtocol
 
 	e.captureCertificateDetails(&res, state)
+	e.captureTLSDetails(&res, state)
 
 	if len(target.ALPNs) > 0 {
 		if state.NegotiatedProtocol == "" {
+			res.TotalDuration = time.Since(startTime)
 			res.Failure = &Failure{Kind: "alpn_mismatch", Message: "server did not negotiate ALPN"}
 			return res
 		}
 		if !contains(target.ALPNs, state.NegotiatedProtocol) {
+			res.TotalDuration = time.Since(startTime)
 			res.Failure = &Failure{Kind: "alpn_mismatch", Message: fmt.Sprintf("negotiated %s", state.NegotiatedProtocol)}
 			return res
 		}
@@ -160,10 +218,12 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 		if errors.Is(err, errHostCATrustUnavailable) {
 			kind = "host_ca_unavailable"
 		}
+		res.TotalDuration = time.Since(startTime)
 		res.Failure = &Failure{Kind: kind, Message: err.Error()}
 		return res
 	}
 
+	res.TotalDuration = time.Since(startTime)
 	return res
 }
 
@@ -189,6 +249,11 @@ func (e *Engine) captureCertificateDetails(res *Result, state tls.ConnectionStat
 	if len(sans) > 0 {
 		res.LeafSANs = sans
 	}
+}
+
+func (e *Engine) captureTLSDetails(res *Result, state tls.ConnectionState) {
+	res.TLSVersion = tlsVersionString(state.Version)
+	res.CipherSuite = tls.CipherSuiteName(state.CipherSuite)
 }
 
 func (e *Engine) verifyPeerCertificate(state tls.ConnectionState, target plan.ProbeTarget) error {
@@ -246,4 +311,19 @@ func contains(values []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+func tlsVersionString(version uint16) string {
+	switch version {
+	case tls.VersionTLS10:
+		return "TLS 1.0"
+	case tls.VersionTLS11:
+		return "TLS 1.1"
+	case tls.VersionTLS12:
+		return "TLS 1.2"
+	case tls.VersionTLS13:
+		return "TLS 1.3"
+	default:
+		return fmt.Sprintf("0x%04X", version)
+	}
 }
