@@ -24,8 +24,10 @@ The resulting JSON document contains two top-level keys:
   target also records a `trust` strategy (`system` or `host_ca`) so it is obvious which authority
   bundle the probe engine will use during verification.
 * `results` – an entry per probe attempt that captures negotiated protocols, peer certificate
-  metadata (subject, issuer, SANs, fingerprint), and failure classifications such as `timeout`,
-  `alpn_mismatch`, `untrusted_cert`, or `host_ca_unavailable`.
+  metadata (subject, issuer, SANs, fingerprint), connection details (local/remote addresses,
+  resolved IP, TLS version, cipher suite), timing information (dial, handshake, and total
+  durations), and failure classifications such as `timeout`, `alpn_mismatch`, `untrusted_cert`, or
+  `host_ca_unavailable`. When a hostname resolves to multiple IPs, each IP is probed independently.
 
 Flags:
 
