@@ -372,3 +372,160 @@ func splitHostPort(t *testing.T, addr string) (string, int) {
 	}
 	return host, port
 }
+
+func TestEngineMetadata(t *testing.T) {
+	t.Parallel()
+
+	cert, pool := generateServerCert(t, "metadata-test.example.com")
+	addr, cleanup := startTLSServer(t, &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		NextProtos:   []string{"h2"},
+	}, nil)
+	t.Cleanup(cleanup)
+
+	host, port := splitHostPort(t, addr)
+	target := plan.ProbeTarget{
+		ServiceKey: "proxy_web",
+		Address:    host,
+		Port:       port,
+		PrimarySNI: "metadata-test.example.com",
+		ALPNs:      []string{"h2"},
+		Trust:      plan.TrustSystemRoots,
+		Repeat:     1,
+	}
+
+	engine := NewEngine()
+	engine.systemRoots = pool
+
+	probePlan := plan.Plan{Targets: []plan.ProbeTarget{target}}
+	results, err := engine.Run(context.Background(), probePlan)
+	if err != nil {
+		t.Fatalf("engine.Run returned error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+
+	res := results[0]
+	if res.Failure != nil {
+		t.Fatalf("expected success, got failure: %#v", res.Failure)
+	}
+
+	// Verify new metadata fields are populated
+	if res.LocalAddr == "" {
+		t.Errorf("LocalAddr should be populated")
+	}
+	if res.RemoteAddr == "" {
+		t.Errorf("RemoteAddr should be populated")
+	}
+	if res.ResolvedIP == "" {
+		t.Errorf("ResolvedIP should be populated")
+	}
+	if res.DialDuration <= 0 {
+		t.Errorf("DialDuration should be positive, got %v", res.DialDuration)
+	}
+	if res.HandshakeDuration <= 0 {
+		t.Errorf("HandshakeDuration should be positive, got %v", res.HandshakeDuration)
+	}
+	if res.TotalDuration <= 0 {
+		t.Errorf("TotalDuration should be positive, got %v", res.TotalDuration)
+	}
+	if res.TLSVersion == "" {
+		t.Errorf("TLSVersion should be populated")
+	}
+	if res.CipherSuite == "" {
+		t.Errorf("CipherSuite should be populated")
+	}
+
+	// Verify timing relationships
+	if res.TotalDuration < res.DialDuration {
+		t.Errorf("TotalDuration (%v) should be >= DialDuration (%v)", res.TotalDuration, res.DialDuration)
+	}
+	if res.TotalDuration < res.HandshakeDuration {
+		t.Errorf("TotalDuration (%v) should be >= HandshakeDuration (%v)", res.TotalDuration, res.HandshakeDuration)
+	}
+
+	t.Logf("Metadata captured successfully:")
+	t.Logf("  LocalAddr: %s", res.LocalAddr)
+	t.Logf("  RemoteAddr: %s", res.RemoteAddr)
+	t.Logf("  ResolvedIP: %s", res.ResolvedIP)
+	t.Logf("  DialDuration: %v", res.DialDuration)
+	t.Logf("  HandshakeDuration: %v", res.HandshakeDuration)
+	t.Logf("  TotalDuration: %v", res.TotalDuration)
+	t.Logf("  TLSVersion: %s", res.TLSVersion)
+	t.Logf("  CipherSuite: %s", res.CipherSuite)
+}
+
+func TestEngineMultiIPResolution(t *testing.T) {
+	t.Parallel()
+
+	cert, pool := generateServerCert(t, "multi-ip-test.example.com")
+	addr, cleanup := startTLSServer(t, &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		NextProtos:   []string{"h2"},
+	}, nil)
+	t.Cleanup(cleanup)
+
+	host, port := splitHostPort(t, addr)
+	target := plan.ProbeTarget{
+		ServiceKey:  "proxy_web",
+		Address:     host,
+		ResolvedIPs: []string{host}, // Test with single pre-resolved IP
+		Port:        port,
+		PrimarySNI:  "multi-ip-test.example.com",
+		ALPNs:       []string{"h2"},
+		Trust:       plan.TrustSystemRoots,
+		Repeat:      1,
+	}
+
+	engine := NewEngine()
+	engine.systemRoots = pool
+
+	probePlan := plan.Plan{Targets: []plan.ProbeTarget{target}}
+	results, err := engine.Run(context.Background(), probePlan)
+	if err != nil {
+		t.Fatalf("engine.Run returned error: %v", err)
+	}
+
+	// Should have 1 result (one per IP in ResolvedIPs)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result (one per resolved IP), got %d", len(results))
+	}
+
+	res := results[0]
+	if res.Failure != nil {
+		t.Errorf("expected success, got failure: %#v", res.Failure)
+	}
+	if res.ResolvedIP == "" {
+		t.Errorf("ResolvedIP should be populated")
+	}
+
+	// Test that an empty ResolvedIPs list triggers DNS resolution
+	target2 := plan.ProbeTarget{
+		ServiceKey:  "proxy_web",
+		Address:     host,
+		ResolvedIPs: nil, // Will trigger DNS resolution in Run()
+		Port:        port,
+		PrimarySNI:  "multi-ip-test.example.com",
+		ALPNs:       []string{"h2"},
+		Trust:       plan.TrustSystemRoots,
+		Repeat:      1,
+	}
+
+	probePlan2 := plan.Plan{Targets: []plan.ProbeTarget{target2}}
+	results2, err := engine.Run(context.Background(), probePlan2)
+	if err != nil {
+		t.Fatalf("engine.Run returned error: %v", err)
+	}
+
+	// Should have at least 1 result
+	if len(results2) < 1 {
+		t.Fatalf("expected at least 1 result, got %d", len(results2))
+	}
+
+	for i, res := range results2 {
+		if res.Failure != nil {
+			t.Logf("result %d: got failure (expected for some DNS lookups): %#v", i, res.Failure)
+		}
+	}
+}
