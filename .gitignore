@@ -1,0 +1,11 @@
+# Binaries
+tlscheck
+
+# Test and coverage artifacts
+*.test
+*.out
+coverage.txt
+
+# Build artifacts
+dist/
+bin/
