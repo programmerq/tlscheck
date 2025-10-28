@@ -28,6 +28,8 @@
 - **Repeat count**: default to a single attempt (`N = 1`) per `(SNI, ALPN, IP)` combination. Allow opt-in configuration for higher counts when deeper sampling is required.
 - **Failure taxonomy**: classify probe outcomes into `handshake_failed`, `upgrade_rejected`, `alpn_mismatch`, `unexpected_cert`, `timeout`, and `proxy_connect_failed`.
 - **Logging**: capture target host, resolved IP, SNI sent, ALPN list, negotiated protocol, leaf certificate fingerprint/subject, upgrade path details, and proxy metadata when applicable.
+- **Connection metadata**: capture local and remote addresses, TLS version, cipher suite, and timing information (dial duration, handshake duration, total duration) for each probe attempt.
+- **DNS resolution**: automatically resolve hostnames to IPs and probe each resolved IP independently. Pre-resolved IPs can be specified explicitly in the probe plan.
 
 ## Implementation Roadmap
 
