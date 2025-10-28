@@ -76,7 +76,7 @@ func TestParseArgsWithIPAddresses(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+			// Note: Not parallel because ParseArgs sets a global usage variable
 			opts, _, err := ParseArgs(tc.args, []string{"proxy_web"})
 			if err != nil {
 				t.Fatalf("ParseArgs() error = %v", err)
