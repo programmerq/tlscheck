@@ -131,6 +131,7 @@ func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq
 			ServiceKey:     t.Key,
 			DisplayName:    t.DisplayName,
 			Address:        opts.PublicAddr,
+			ResolvedIPs:    cloneSlice(opts.IPAddresses),
 			Port:           port,
 			PrimarySNI:     primarySNI,
 			AdditionalSNIs: cloneSlice(additionalSNIs),
