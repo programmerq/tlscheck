@@ -94,7 +94,7 @@ func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 
 	ipAddresses = strings.TrimSpace(ipAddresses)
 	if ipAddresses != "" {
-		opts.IPAddresses = splitIPAddresses(ipAddresses)
+		opts.IPAddresses = splitList(ipAddresses, false)
 	}
 
 	opts.Proxy = detectProxySettings()
@@ -103,19 +103,10 @@ func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 }
 
 func splitCSV(value string) []string {
-	raw := strings.Split(value, ",")
-	out := make([]string, 0, len(raw))
-	for _, v := range raw {
-		v = strings.TrimSpace(v)
-		if v == "" {
-			continue
-		}
-		out = append(out, strings.ToLower(v))
-	}
-	return out
+	return splitList(value, true)
 }
 
-func splitIPAddresses(value string) []string {
+func splitList(value string, lowercase bool) []string {
 	raw := strings.Split(value, ",")
 	out := make([]string, 0, len(raw))
 	for _, v := range raw {
@@ -123,7 +114,9 @@ func splitIPAddresses(value string) []string {
 		if v == "" {
 			continue
 		}
-		// IP addresses should not be lowercased (important for IPv6)
+		if lowercase {
+			v = strings.ToLower(v)
+		}
 		out = append(out, v)
 	}
 	return out
