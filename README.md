@@ -60,6 +60,16 @@ bundle cannot be fetched, only the host-CA probes fail (with `host_ca_unavailabl
 reporting the presented certificate details. All failures now capture certificate metadata even when
 verification fails so operators can inspect SANs and issuers for misconfigurations.
 
+## Building
+
+Build the binary for your current platform:
+
+```shell
+make build
+```
+
+For cross-platform builds and release artifacts, see the [release documentation](docs/release.md).
+
 ## Testing
 
 Run `go test ./...` for the fast unit suite. The [testing strategy](docs/testing.md) describes how we
@@ -68,3 +78,11 @@ includes discovery of Teleport profiles, `/webapi/ping` lookups, and TLS probe e
 in-memory certificates so handshake, ALPN mismatch, and failure classifications stay regression-free.
 The same document outlines a short manual validation loop for exercising the tool against a real
 Teleport cluster before the full integration harness is in place.
+
+## Releases
+
+See [docs/release.md](docs/release.md) for information about the release process, including:
+- Creating releases with GitHub tags
+- Building cross-platform binaries
+- Docker image publishing to ghcr.io
+- Supported platforms and architectures
