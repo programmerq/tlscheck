@@ -56,6 +56,11 @@ func TestExecuteSuccess(t *testing.T) {
 	if !reflect.DeepEqual(engine.lastPlan, expectedPlan) {
 		t.Fatalf("engine received unexpected plan: %#v", engine.lastPlan)
 	}
+
+	// Verify network info is populated
+	if exec.Network == nil {
+		t.Fatal("expected Network info to be populated")
+	}
 }
 
 func TestExecuteBuilderError(t *testing.T) {
@@ -152,6 +157,11 @@ func TestExecuteCertificateCollection(t *testing.T) {
 	if !reflect.DeepEqual(exec.Certs, expectedCerts) {
 		t.Errorf("Certs mismatch:\n got %#v\nwant %#v", exec.Certs, expectedCerts)
 	}
+
+	// Verify network info is populated
+	if exec.Network == nil {
+		t.Fatal("expected Network info to be populated")
+	}
 }
 
 func TestExecuteNoCertificates(t *testing.T) {
@@ -172,5 +182,10 @@ func TestExecuteNoCertificates(t *testing.T) {
 	// Verify Certs is not set (or is empty) when engine doesn't implement CertificateCollector
 	if exec.Certs != nil && len(exec.Certs) > 0 {
 		t.Errorf("expected Certs to be empty or nil when engine doesn't collect certificates, got %#v", exec.Certs)
+	}
+
+	// Verify network info is populated
+	if exec.Network == nil {
+		t.Fatal("expected Network info to be populated")
 	}
 }

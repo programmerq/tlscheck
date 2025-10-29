@@ -17,8 +17,23 @@ not read as hard outages. Example:
 go run ./cmd/tlscheck > results.json
 ```
 
-The resulting JSON document contains three top-level keys (`plan`, `results`, and `certs`):
+The resulting JSON document contains several top-level keys:
 
+* `arguments` – the parsed command-line options and runtime configuration used for this execution.
+* `network` – comprehensive network configuration discovery including:
+  - `proxy_config` – detected proxy settings from environment variables (HTTP_PROXY, HTTPS_PROXY,
+    NO_PROXY, ALL_PROXY, FTP_PROXY), OS-level system proxy settings (macOS Network Settings, Windows
+    Registry), SOCKS proxy configuration, and PAC (Proxy Auto-Configuration) file detection and
+    retrieval. This captures all proxy sources including those not visible via environment variables
+    alone.
+  - `routes` – system routing table when available, including default gateway, all route entries with
+    destination, gateway, interface, and metrics. Routes are captured on Linux (via `ip route` or
+    `route`), macOS (via `netstat -rn`), and Windows (via `route print`). If route capture fails due
+    to permissions, the `available` field is false and an error message is provided.
+  - `vpn` – VPN detection results including identified VPN network interfaces (tun, tap, utun, ppp,
+    wireguard, etc.), running VPN applications (OpenVPN, WireGuard, Cisco AnyConnect, GlobalProtect,
+    Tailscale, ZeroTier, etc.), and routes associated with VPN interfaces. Detection works across
+    Linux, macOS, and Windows platforms.
 * `plan` – the resolved probe matrix, including the base16 cluster hints and the upgrade sequence we
   exercise against the proxy web endpoint to detect whether connection upgrades are required. Each
   target also records a `trust` strategy (`system` or `host_ca`) so it is obvious which authority
@@ -66,6 +81,53 @@ that bundle, while all other targets continue to use the operating system trust 
 bundle cannot be fetched, only the host-CA probes fail (with `host_ca_unavailable`) while still
 reporting the presented certificate details. All failures now capture certificate metadata even when
 verification fails so operators can inspect SANs and issuers for misconfigurations.
+
+## Network Discovery
+
+tlscheck automatically captures comprehensive network configuration to help diagnose connectivity
+issues in corporate environments:
+
+### Proxy Detection
+
+- **Environment Variables**: Detects `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `ALL_PROXY`, and
+  `FTP_PROXY` (both uppercase and lowercase variants).
+- **System-Level Proxies**: On macOS, reads proxy settings from Network Preferences via
+  `networksetup`. On Windows, reads from the Registry (`HKEY_CURRENT_USER\Software\Microsoft\Windows\
+  CurrentVersion\Internet Settings`).
+- **SOCKS Proxies**: Detects SOCKS4/SOCKS5 proxies configured via `ALL_PROXY` environment variable.
+- **PAC (Proxy Auto-Configuration)**: Detects PAC file URLs from system settings and attempts to
+  download and include the PAC script content for inspection.
+
+### Routing Table Capture
+
+tlscheck captures the system routing table when available:
+
+- **Linux**: Uses `ip route show` or falls back to `route -n`
+- **macOS**: Uses `netstat -rn`
+- **Windows**: Uses `route print -4`
+
+Route information includes destination networks, gateways, interfaces, metrics, and flags. If route
+capture fails due to insufficient permissions, the output indicates this with an error message rather
+than failing the entire probe run. Network interfaces are also enumerated with their addresses, MTU,
+and flags.
+
+### VPN Detection
+
+Automatically identifies VPN connections:
+
+- **VPN Interfaces**: Detects network interfaces with common VPN naming patterns (tun, tap, utun, ppp,
+  wireguard, ipsec, vpn, openvpn, tailscale, zerotier) and reports their status and addresses.
+- **VPN Applications**: Identifies running VPN applications and services:
+  - Linux: OpenVPN, WireGuard, strongSwan, Tailscale, ZeroTier, NetworkManager VPN connections
+  - macOS: OpenVPN, WireGuard, Cisco AnyConnect, GlobalProtect, Tunnelblick, Viscosity, Tailscale,
+    ZeroTier, IPSec/IKEv2 configurations via `scutil`
+  - Windows: VPN adapters including PPTP, L2TP, and WAN Miniport interfaces
+- **VPN Routes**: Extracts routing table entries associated with detected VPN interfaces to show which
+  networks are routed through VPN tunnels.
+
+All network discovery results are included in the `network` top-level key in the JSON output,
+providing operators with a complete picture of the network environment alongside connectivity probe
+results.
 
 ## Building
 

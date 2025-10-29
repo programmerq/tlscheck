@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/programmerq/tlscheck/internal/config"
+	"github.com/programmerq/tlscheck/internal/discovery"
 	"github.com/programmerq/tlscheck/internal/plan"
 	"github.com/programmerq/tlscheck/internal/probe"
 )
@@ -35,10 +36,11 @@ type CertificateCollector interface {
 
 // Execution captures the combination of the generated plan and the resulting probe outcomes.
 type Execution struct {
-	Arguments *config.Options   `json:"arguments,omitempty"`
-	Plan      plan.Plan         `json:"plan"`
-	Results   []probe.Result    `json:"results"`
-	Certs     map[string]string `json:"certs,omitempty"`
+	Arguments *config.Options        `json:"arguments,omitempty"`
+	Network   *discovery.NetworkInfo `json:"network,omitempty"`
+	Plan      plan.Plan              `json:"plan"`
+	Results   []probe.Result         `json:"results"`
+	Certs     map[string]string      `json:"certs,omitempty"`
 }
 
 // Execute builds a probe plan using the supplied builder and executes it with the engine.
@@ -50,6 +52,9 @@ func Execute(ctx context.Context, opts config.Options, builder PlanBuilder, engi
 		return Execution{}, fmt.Errorf("probe engine is required")
 	}
 
+	// Discover network configuration including proxy, routes, and VPN
+	networkInfo := discovery.DiscoverNetwork(ctx)
+
 	probePlan, err := builder.Build(opts)
 	if err != nil {
 		return Execution{}, err
@@ -60,7 +65,12 @@ func Execute(ctx context.Context, opts config.Options, builder PlanBuilder, engi
 		return Execution{}, err
 	}
 
-	exec := Execution{Arguments: &opts, Plan: probePlan, Results: results}
+	exec := Execution{
+		Arguments: &opts,
+		Network:   &networkInfo,
+		Plan:      probePlan,
+		Results:   results,
+	}
 
 	// If the engine supports certificate collection, retrieve the certificates
 	if collector, ok := engine.(CertificateCollector); ok {
