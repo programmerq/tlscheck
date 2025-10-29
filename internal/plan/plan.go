@@ -35,6 +35,7 @@ type ProbeTarget struct {
 	InformationalOnly bool             `json:"informational_only,omitempty"`
 	Repeat            int              `json:"repeat"`
 	Notes             []string         `json:"notes,omitempty"`
+	UseProxy          bool             `json:"use_proxy,omitempty"`
 }
 
 // TrustStrategy describes which certificate authorities should be trusted for a probe target.
@@ -77,6 +78,9 @@ func Build(opts config.Options) (Plan, error) {
 		DefaultUpgradePath: seq,
 	}
 
+	// Determine if proxy is configured
+	proxyConfigured := opts.Proxy.HTTPSProxy != "" || opts.Proxy.HTTPProxy != ""
+
 	for _, tmpl := range serviceTemplates {
 		if filtering {
 			if _, ok := tmplFilter[tmpl.Key]; !ok {
@@ -86,7 +90,26 @@ func Build(opts config.Options) (Plan, error) {
 		}
 
 		targets := tmpl.instantiate(opts, base16Name, seq)
-		plan.Targets = append(plan.Targets, targets...)
+
+		// If proxy is configured, duplicate targets: one with proxy, one without
+		if proxyConfigured {
+			for _, target := range targets {
+				// Add target with proxy
+				withProxy := target
+				withProxy.UseProxy = true
+				withProxy.Notes = append(cloneSlice(withProxy.Notes), "probe using configured proxy")
+				plan.Targets = append(plan.Targets, withProxy)
+
+				// Add target without proxy
+				withoutProxy := target
+				withoutProxy.UseProxy = false
+				withoutProxy.Notes = append(cloneSlice(withoutProxy.Notes), "probe bypassing proxy (direct connection)")
+				plan.Targets = append(plan.Targets, withoutProxy)
+			}
+		} else {
+			// No proxy configured, add targets as-is
+			plan.Targets = append(plan.Targets, targets...)
+		}
 	}
 
 	if len(tmplFilter) > 0 {

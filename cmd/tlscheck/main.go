@@ -95,6 +95,16 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, deps depe
 				accessor.SetRootCAs(pool)
 			}
 		}
+
+		// Configure proxy settings on the engine
+		if proxySetter, ok := engine.(interface{ SetProxyURL(string) }); ok {
+			// Prefer HTTPS_PROXY for HTTPS connections
+			if resolved.Proxy.HTTPSProxy != "" {
+				proxySetter.SetProxyURL(resolved.Proxy.HTTPSProxy)
+			} else if resolved.Proxy.HTTPProxy != "" {
+				proxySetter.SetProxyURL(resolved.Proxy.HTTPProxy)
+			}
+		}
 	}
 
 	exec, err := runner.Execute(ctx, resolved, builder, engine)

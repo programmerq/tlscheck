@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +29,7 @@ type Engine struct {
 	Dialer      Dialer
 	Timeout     time.Duration
 	RootCAs     *x509.CertPool
+	ProxyURL    string // HTTP(S) proxy URL for connections
 	systemRoots *x509.CertPool
 	certs       map[string]string // fingerprint -> PEM
 	certsMu     sync.Mutex
@@ -47,6 +49,14 @@ func (e *Engine) SetRootCAs(pool *x509.CertPool) {
 		return
 	}
 	e.RootCAs = pool
+}
+
+// SetProxyURL updates the proxy URL used for connections.
+func (e *Engine) SetProxyURL(proxyURL string) {
+	if e == nil {
+		return
+	}
+	e.ProxyURL = proxyURL
 }
 
 // GetCertificates returns the map of certificates encountered during probing.
@@ -174,6 +184,33 @@ func cloneSlice(input []string) []string {
 	return out
 }
 
+// getDialer returns the appropriate dialer based on whether proxy should be used.
+func (e *Engine) getDialer(useProxy bool) Dialer {
+	// If proxy is not requested or not configured, use the default dialer
+	if !useProxy || e.ProxyURL == "" {
+		return e.Dialer
+	}
+
+	// Parse the proxy URL
+	proxyURL, err := url.Parse(e.ProxyURL)
+	if err != nil {
+		// If proxy URL is invalid, fall back to default dialer
+		return e.Dialer
+	}
+
+	// Create a proxy dialer
+	baseDialer, ok := e.Dialer.(*net.Dialer)
+	if !ok {
+		// If the base dialer is not a net.Dialer, create a default one
+		baseDialer = &net.Dialer{Timeout: 10 * time.Second}
+	}
+
+	return &ProxyDialer{
+		Dialer:   baseDialer,
+		ProxyURL: proxyURL,
+	}
+}
+
 func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt int) Result {
 	startTime := time.Now()
 	res := Result{Target: target, Attempt: attempt}
@@ -181,9 +218,12 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 	dialCtx, cancel := context.WithTimeout(ctx, e.Timeout)
 	defer cancel()
 
+	// Create the appropriate dialer based on proxy settings
+	dialer := e.getDialer(target.UseProxy)
+
 	addr := net.JoinHostPort(target.Address, fmt.Sprintf("%d", target.Port))
 	dialStart := time.Now()
-	conn, err := e.Dialer.DialContext(dialCtx, "tcp", addr)
+	conn, err := dialer.DialContext(dialCtx, "tcp", addr)
 	dialEnd := time.Now()
 	res.DialDuration = dialEnd.Sub(dialStart)
 	if err != nil {
