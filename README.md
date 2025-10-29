@@ -17,7 +17,7 @@ not read as hard outages. Example:
 go run ./cmd/tlscheck > results.json
 ```
 
-The resulting JSON document contains three top-level keys:
+The resulting JSON document contains three top-level keys (`plan`, `results`, and `certs`):
 
 * `plan` – the resolved probe matrix, including the base16 cluster hints and the upgrade sequence we
   exercise against the proxy web endpoint to detect whether connection upgrades are required. Each
