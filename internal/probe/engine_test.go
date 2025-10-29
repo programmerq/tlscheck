@@ -470,7 +470,7 @@ func TestEngineMultiIPResolution(t *testing.T) {
 	target := plan.ProbeTarget{
 		ServiceKey:  "proxy_web",
 		Address:     host,
-		ResolvedIPs: []string{host}, // Test with single pre-resolved IP
+		OverrideIPs: []string{host}, // Test with single override IP
 		Port:        port,
 		PrimarySNI:  "multi-ip-test.example.com",
 		ALPNs:       []string{"h2"},
@@ -500,11 +500,11 @@ func TestEngineMultiIPResolution(t *testing.T) {
 		t.Errorf("ResolvedIP should be populated")
 	}
 
-	// Test that an empty ResolvedIPs list triggers DNS resolution
+	// Test that an empty OverrideIPs list triggers DNS resolution
 	target2 := plan.ProbeTarget{
 		ServiceKey:  "proxy_web",
 		Address:     host,
-		ResolvedIPs: nil, // Will trigger DNS resolution in Run()
+		OverrideIPs: nil, // Will trigger DNS resolution in Run()
 		Port:        port,
 		PrimarySNI:  "multi-ip-test.example.com",
 		ALPNs:       []string{"h2"},

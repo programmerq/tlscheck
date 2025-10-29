@@ -24,7 +24,8 @@ type ProbeTarget struct {
 	ServiceKey        string           `json:"service_key"`
 	DisplayName       string           `json:"display_name"`
 	Address           string           `json:"address"`
-	ResolvedIPs       []string         `json:"resolved_ips,omitempty"`
+	DNSResolvedIPs    []string         `json:"dns_resolved_ips,omitempty"`
+	OverrideIPs       []string         `json:"override_ips,omitempty"`
 	Port              int              `json:"port"`
 	PrimarySNI        string           `json:"primary_sni"`
 	AdditionalSNIs    []string         `json:"additional_snis,omitempty"`
@@ -131,6 +132,7 @@ func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq
 			ServiceKey:     t.Key,
 			DisplayName:    t.DisplayName,
 			Address:        opts.PublicAddr,
+			OverrideIPs:    cloneSlice(opts.IPAddresses),
 			Port:           port,
 			PrimarySNI:     primarySNI,
 			AdditionalSNIs: cloneSlice(additionalSNIs),

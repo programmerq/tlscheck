@@ -17,6 +17,7 @@ type Options struct {
 	TLSRoutingEnabled bool          `json:"tls_routing_enabled"`
 	Repeat            int           `json:"repeat"`
 	ServiceFilter     []string      `json:"service_filter,omitempty"`
+	IPAddresses       []string      `json:"ip_addresses,omitempty"`
 	Proxy             ProxySettings `json:"proxy"`
 	ProfileSource     *ProfileInfo  `json:"profile_source,omitempty"`
 	HostCAPEM         []byte        `json:"-"`
@@ -57,11 +58,13 @@ func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 
 	var opts Options
 	var services string
+	var ipAddresses string
 	var showVersion bool
 
 	fs.StringVar(&opts.PublicAddr, "proxy-server", "", "Teleport proxy public address (DNS name)")
 	fs.IntVar(&opts.Repeat, "repeat", 1, "Attempts per SNI/ALPN/IP combination (default 1)")
 	fs.StringVar(&services, "services", "all", servicesHelp)
+	fs.StringVar(&ipAddresses, "ip-addresses", "", "Comma-separated list of IP addresses to use instead of DNS resolution")
 	fs.BoolVar(&showVersion, "version", false, "Print tlscheck version and exit")
 	fs.BoolVar(&showVersion, "v", false, "Print tlscheck version and exit")
 
@@ -71,6 +74,7 @@ func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 		fmt.Fprintf(fs.Output(), "  --proxy-server string\n\tTeleport proxy public address (DNS name)\n")
 		fmt.Fprintf(fs.Output(), "  --repeat int\n\tAttempts per SNI/ALPN/IP combination (default 1)\n")
 		fmt.Fprintf(fs.Output(), "  --services string\n\t%s\n", servicesHelp)
+		fmt.Fprintf(fs.Output(), "  --ip-addresses string\n\tComma-separated list of IP addresses to use instead of DNS resolution\n")
 		fmt.Fprintf(fs.Output(), "  -v, --version\n\tPrint tlscheck version and exit\n")
 	}
 	usage = fs.Usage
@@ -88,12 +92,21 @@ func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 		opts.ServiceFilter = splitCSV(services)
 	}
 
+	ipAddresses = strings.TrimSpace(ipAddresses)
+	if ipAddresses != "" {
+		opts.IPAddresses = splitList(ipAddresses, false)
+	}
+
 	opts.Proxy = detectProxySettings()
 
 	return opts, showVersion, nil
 }
 
 func splitCSV(value string) []string {
+	return splitList(value, true)
+}
+
+func splitList(value string, lowercase bool) []string {
 	raw := strings.Split(value, ",")
 	out := make([]string, 0, len(raw))
 	for _, v := range raw {
@@ -101,7 +114,10 @@ func splitCSV(value string) []string {
 		if v == "" {
 			continue
 		}
-		out = append(out, strings.ToLower(v))
+		if lowercase {
+			v = strings.ToLower(v)
+		}
+		out = append(out, v)
 	}
 	return out
 }

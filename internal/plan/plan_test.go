@@ -337,3 +337,66 @@ func TestBuildKeepsNonInformationalWhenTLSRoutingEnabled(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildWithIPAddresses(t *testing.T) {
+	t.Parallel()
+
+	opts := config.Options{
+		PublicAddr:        "cluster.example.com",
+		ClusterName:       "example",
+		TeleportVersion:   "v17.3.2",
+		Repeat:            1,
+		WebProxyPort:      443,
+		TLSRoutingEnabled: true,
+		IPAddresses:       []string{"192.168.1.1", "10.0.0.1"},
+	}
+
+	plan, err := Build(opts)
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	if len(plan.Targets) == 0 {
+		t.Fatal("expected targets to be generated")
+	}
+
+	for _, target := range plan.Targets {
+		if len(target.OverrideIPs) != 2 {
+			t.Fatalf("target %s has %d override IPs, want 2", target.ServiceKey, len(target.OverrideIPs))
+		}
+		if target.OverrideIPs[0] != "192.168.1.1" {
+			t.Fatalf("target %s OverrideIPs[0] = %q, want %q", target.ServiceKey, target.OverrideIPs[0], "192.168.1.1")
+		}
+		if target.OverrideIPs[1] != "10.0.0.1" {
+			t.Fatalf("target %s OverrideIPs[1] = %q, want %q", target.ServiceKey, target.OverrideIPs[1], "10.0.0.1")
+		}
+	}
+}
+
+func TestBuildWithoutIPAddresses(t *testing.T) {
+	t.Parallel()
+
+	opts := config.Options{
+		PublicAddr:        "cluster.example.com",
+		ClusterName:       "example",
+		TeleportVersion:   "v17.3.2",
+		Repeat:            1,
+		WebProxyPort:      443,
+		TLSRoutingEnabled: true,
+	}
+
+	plan, err := Build(opts)
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	if len(plan.Targets) == 0 {
+		t.Fatal("expected targets to be generated")
+	}
+
+	for _, target := range plan.Targets {
+		if len(target.OverrideIPs) != 0 {
+			t.Fatalf("target %s has %d override IPs, want 0 (will be resolved at probe time)", target.ServiceKey, len(target.OverrideIPs))
+		}
+	}
+}

@@ -98,27 +98,35 @@ func (e *Engine) Run(ctx context.Context, p plan.Plan) ([]Result, error) {
 
 	results := make([]Result, 0)
 	for _, target := range p.Targets {
-		// Resolve IPs if not already resolved
-		ips := target.ResolvedIPs
+		// Always try to resolve DNS for informational purposes
+		dnsIPs := []string{}
+		resolved, err := net.LookupIP(target.Address)
+		if err == nil && len(resolved) > 0 {
+			for _, ip := range resolved {
+				dnsIPs = append(dnsIPs, ip.String())
+			}
+		}
+
+		// Update the target with DNS-resolved IPs
+		target.DNSResolvedIPs = dnsIPs
+
+		// Determine which IPs to probe
+		ips := target.OverrideIPs
 		if len(ips) == 0 {
-			// Try to resolve the address
-			resolved, err := net.LookupIP(target.Address)
-			if err == nil && len(resolved) > 0 {
-				for _, ip := range resolved {
-					ips = append(ips, ip.String())
-				}
-			} else {
-				// If resolution fails, use the address as-is (might be an IP already)
+			// No override IPs, use DNS-resolved IPs
+			ips = dnsIPs
+			if len(ips) == 0 {
+				// If DNS resolution failed, use the address as-is (might be an IP already)
 				ips = []string{target.Address}
 			}
 		}
 
-		// Probe each resolved IP
+		// Probe each IP
 		for _, ip := range ips {
 			ipTarget := target
 			ipTarget.Address = ip
 			if len(ips) > 1 {
-				ipTarget.Notes = append(cloneSlice(ipTarget.Notes), fmt.Sprintf("resolved to %s", ip))
+				ipTarget.Notes = append(cloneSlice(ipTarget.Notes), fmt.Sprintf("probing %s", ip))
 			}
 
 			repeat := ipTarget.Repeat
