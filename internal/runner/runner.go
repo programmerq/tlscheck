@@ -29,8 +29,9 @@ type Engine interface {
 
 // Execution captures the combination of the generated plan and the resulting probe outcomes.
 type Execution struct {
-	Plan    plan.Plan      `json:"plan"`
-	Results []probe.Result `json:"results"`
+	Arguments *config.Options `json:"arguments,omitempty"`
+	Plan      plan.Plan       `json:"plan"`
+	Results   []probe.Result  `json:"results"`
 }
 
 // Execute builds a probe plan using the supplied builder and executes it with the engine.
@@ -52,5 +53,5 @@ func Execute(ctx context.Context, opts config.Options, builder PlanBuilder, engi
 		return Execution{}, err
 	}
 
-	return Execution{Plan: probePlan, Results: results}, nil
+	return Execution{Arguments: &opts, Plan: probePlan, Results: results}, nil
 }

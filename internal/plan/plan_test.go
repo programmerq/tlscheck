@@ -361,14 +361,14 @@ func TestBuildWithIPAddresses(t *testing.T) {
 	}
 
 	for _, target := range plan.Targets {
-		if len(target.ResolvedIPs) != 2 {
-			t.Fatalf("target %s has %d resolved IPs, want 2", target.ServiceKey, len(target.ResolvedIPs))
+		if len(target.OverrideIPs) != 2 {
+			t.Fatalf("target %s has %d override IPs, want 2", target.ServiceKey, len(target.OverrideIPs))
 		}
-		if target.ResolvedIPs[0] != "192.168.1.1" {
-			t.Fatalf("target %s ResolvedIPs[0] = %q, want %q", target.ServiceKey, target.ResolvedIPs[0], "192.168.1.1")
+		if target.OverrideIPs[0] != "192.168.1.1" {
+			t.Fatalf("target %s OverrideIPs[0] = %q, want %q", target.ServiceKey, target.OverrideIPs[0], "192.168.1.1")
 		}
-		if target.ResolvedIPs[1] != "10.0.0.1" {
-			t.Fatalf("target %s ResolvedIPs[1] = %q, want %q", target.ServiceKey, target.ResolvedIPs[1], "10.0.0.1")
+		if target.OverrideIPs[1] != "10.0.0.1" {
+			t.Fatalf("target %s OverrideIPs[1] = %q, want %q", target.ServiceKey, target.OverrideIPs[1], "10.0.0.1")
 		}
 	}
 }
@@ -395,8 +395,8 @@ func TestBuildWithoutIPAddresses(t *testing.T) {
 	}
 
 	for _, target := range plan.Targets {
-		if len(target.ResolvedIPs) != 0 {
-			t.Fatalf("target %s has %d resolved IPs, want 0 (will be resolved at probe time)", target.ServiceKey, len(target.ResolvedIPs))
+		if len(target.OverrideIPs) != 0 {
+			t.Fatalf("target %s has %d override IPs, want 0 (will be resolved at probe time)", target.ServiceKey, len(target.OverrideIPs))
 		}
 	}
 }
