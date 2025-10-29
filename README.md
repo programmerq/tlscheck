@@ -17,7 +17,7 @@ not read as hard outages. Example:
 go run ./cmd/tlscheck > results.json
 ```
 
-The resulting JSON document contains two top-level keys:
+The resulting JSON document contains three top-level keys:
 
 * `plan` – the resolved probe matrix, including the base16 cluster hints and the upgrade sequence we
   exercise against the proxy web endpoint to detect whether connection upgrades are required. Each
@@ -28,6 +28,13 @@ The resulting JSON document contains two top-level keys:
   resolved IP, TLS version, cipher suite), timing information (dial, handshake, and total
   durations), and failure classifications such as `timeout`, `alpn_mismatch`, `untrusted_cert`, or
   `host_ca_unavailable`. When a hostname resolves to multiple IPs, each IP is probed independently.
+  Each result also includes a `certificate_chain` field containing an ordered list of certificate
+  fingerprints (leaf first) representing the complete chain presented by the server.
+* `certs` – a map of all certificates encountered during probing, indexed by their SHA-256
+  fingerprint (uppercase hex). Each entry contains the certificate in PEM format. This structure
+  avoids duplication when the same certificate appears in multiple probe results, and allows easy
+  lookup of the full certificate data by referencing fingerprints from the `certificate_chain` field
+  in results.
 
 Flags:
 

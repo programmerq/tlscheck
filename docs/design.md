@@ -21,13 +21,13 @@
 - **Runtime discovery**: when CLI flags omit cluster metadata, read the active Teleport profile via `$TELEPORT_HOME/current-profile` (or `~/.tsh/current-profile`) and query `/webapi/ping` to obtain the public address, cluster name, and Teleport version automatically.
 - **Upgrade contract**: send `GET /webapi/connectionupgrade` with `Connection: Upgrade`, the relevant `Upgrade` token (`websocket`, `alpn`, `alpn-ping`), and `X-Teleport-Upgrade` mirroring the value to survive middleboxes.
 - **Version gates**: WebSocket upgrade landed in the 15.x line and is mandatory in 18+. Probes for v15–v17 should attempt both WebSocket and legacy upgrades; v18+ uses WebSocket only.
-- **Certificates**: leaf certificates from proxy or auth must chain to the cluster Host CA and present the expected identity. Flag mismatches.
+- **Certificates**: leaf certificates from proxy or auth must chain to the cluster Host CA and present the expected identity. Flag mismatches. The tool captures the full certificate chain and stores all certificates in PEM format at the top level of the JSON output (indexed by SHA-256 fingerprint). This allows inspection of the complete trust chain while avoiding duplication when the same certificate appears in multiple probe results.
 
 ## Probe Execution Defaults
 
 - **Repeat count**: default to a single attempt (`N = 1`) per `(SNI, ALPN, IP)` combination. Allow opt-in configuration for higher counts when deeper sampling is required.
 - **Failure taxonomy**: classify probe outcomes into `handshake_failed`, `upgrade_rejected`, `alpn_mismatch`, `unexpected_cert`, `timeout`, and `proxy_connect_failed`.
-- **Logging**: capture target host, resolved IP, SNI sent, ALPN list, negotiated protocol, leaf certificate fingerprint/subject, upgrade path details, and proxy metadata when applicable.
+- **Logging**: capture target host, resolved IP, SNI sent, ALPN list, negotiated protocol, leaf certificate fingerprint/subject, upgrade path details, and proxy metadata when applicable. Each probe result includes an ordered list of certificate fingerprints representing the complete chain presented by the server (with the leaf certificate first).
 - **Connection metadata**: capture local and remote addresses, TLS version, cipher suite, and timing information (dial duration, handshake duration, total duration) for each probe attempt.
 - **DNS resolution**: automatically resolve hostnames to IPs and probe each resolved IP independently. Pre-resolved IPs can be specified explicitly in the probe plan.
 
