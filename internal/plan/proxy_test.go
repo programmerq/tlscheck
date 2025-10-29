@@ -98,6 +98,59 @@ func TestBuildDuplicatesTargetsWhenProxyConfigured(t *testing.T) {
 	}
 }
 
+func TestDemonstrateProxyDuplication(t *testing.T) {
+	t.Log("\n=== DEMONSTRATION: Proxy Support for TLS Checks ===\n")
+
+	// Scenario 1: No proxy configured
+	t.Log("Scenario 1: NO proxy configured")
+	opts1 := config.Options{
+		PublicAddr:        "teleport.example.com",
+		ClusterName:       "demo-cluster",
+		TeleportVersion:   "v18.0.0",
+		WebProxyPort:      443,
+		TLSRoutingEnabled: true,
+		Repeat:            1,
+		ServiceFilter:     []string{"proxy_web"},
+		Proxy:             config.ProxySettings{},
+	}
+
+	plan1, _ := Build(opts1)
+	t.Logf("Number of targets: %d\n", len(plan1.Targets))
+
+	for i, target := range plan1.Targets {
+		t.Logf("  Target %d: UseProxy=%v, Notes=%v", i+1, target.UseProxy, target.Notes)
+	}
+
+	// Scenario 2: Proxy configured
+	t.Log("\nScenario 2: Proxy CONFIGURED (HTTPS_PROXY=http://proxy.example.com:8080)")
+	opts2 := config.Options{
+		PublicAddr:        "teleport.example.com",
+		ClusterName:       "demo-cluster",
+		TeleportVersion:   "v18.0.0",
+		WebProxyPort:      443,
+		TLSRoutingEnabled: true,
+		Repeat:            1,
+		ServiceFilter:     []string{"proxy_web"},
+		Proxy: config.ProxySettings{
+			HTTPSProxy: "http://proxy.example.com:8080",
+		},
+	}
+
+	plan2, _ := Build(opts2)
+	t.Logf("Number of targets: %d (DOUBLED!)\n", len(plan2.Targets))
+
+	for i, target := range plan2.Targets {
+		t.Logf("  Target %d: UseProxy=%v, Notes=%v", i+1, target.UseProxy, target.Notes)
+	}
+
+	t.Log("\n=== Key Observation ===")
+	t.Log("When a proxy is detected:")
+	t.Log("  1. Each target is duplicated")
+	t.Log("  2. One variant has UseProxy=true (uses configured proxy)")
+	t.Log("  3. Other variant has UseProxy=false (direct connection)")
+	t.Log("  4. Both are tested to compare behavior with/without proxy")
+}
+
 func TestBuildMultipleServicesWithProxy(t *testing.T) {
 	opts := config.Options{
 		PublicAddr:        "teleport.example.com",
