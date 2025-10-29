@@ -4,13 +4,16 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/pem"
 	"math/big"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -528,4 +531,97 @@ func TestEngineMultiIPResolution(t *testing.T) {
 			t.Logf("result %d: got failure (expected for some DNS lookups): %#v", i, res.Failure)
 		}
 	}
+}
+
+func TestEngineCertificateChainCapture(t *testing.T) {
+	t.Parallel()
+
+	cert, pool := generateServerCert(t, "chain-test.example.com")
+	addr, cleanup := startTLSServer(t, &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		NextProtos:   []string{"h2"},
+	}, nil)
+	t.Cleanup(cleanup)
+
+	host, port := splitHostPort(t, addr)
+	target := plan.ProbeTarget{
+		ServiceKey: "proxy_web",
+		Address:    host,
+		Port:       port,
+		PrimarySNI: "chain-test.example.com",
+		ALPNs:      []string{"h2"},
+		Trust:      plan.TrustSystemRoots,
+		Repeat:     1,
+	}
+
+	engine := NewEngine()
+	engine.systemRoots = pool
+
+	probePlan := plan.Plan{Targets: []plan.ProbeTarget{target}}
+	results, err := engine.Run(context.Background(), probePlan)
+	if err != nil {
+		t.Fatalf("engine.Run returned error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+
+	res := results[0]
+	if res.Failure != nil {
+		t.Fatalf("expected success, got failure: %#v", res.Failure)
+	}
+
+	// Verify certificate chain is captured
+	if len(res.CertificateChain) == 0 {
+		t.Fatalf("expected CertificateChain to be populated, got empty slice")
+	}
+
+	// Verify the leaf fingerprint matches the first in the chain
+	if res.LeafFingerprint != res.CertificateChain[0] {
+		t.Errorf("LeafFingerprint %s should match first in CertificateChain %s",
+			res.LeafFingerprint, res.CertificateChain[0])
+	}
+
+	// Verify certificates are stored in PEM format
+	certs := engine.GetCertificates()
+	if len(certs) == 0 {
+		t.Fatalf("expected certificates to be stored in engine, got empty map")
+	}
+
+	// Verify each fingerprint in the chain has a corresponding PEM certificate
+	for i, fingerprint := range res.CertificateChain {
+		pemData, exists := certs[fingerprint]
+		if !exists {
+			t.Errorf("certificate chain[%d] fingerprint %s not found in certs map", i, fingerprint)
+			continue
+		}
+
+		// Verify it's valid PEM
+		block, _ := pem.Decode([]byte(pemData))
+		if block == nil {
+			t.Errorf("certificate chain[%d] fingerprint %s: failed to decode PEM", i, fingerprint)
+			continue
+		}
+		if block.Type != "CERTIFICATE" {
+			t.Errorf("certificate chain[%d] fingerprint %s: PEM type = %q, want CERTIFICATE",
+				i, fingerprint, block.Type)
+		}
+
+		// Verify the fingerprint matches the certificate
+		parsedCert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			t.Errorf("certificate chain[%d] fingerprint %s: failed to parse: %v", i, fingerprint, err)
+			continue
+		}
+
+		sum := sha256.Sum256(parsedCert.Raw)
+		computedFingerprint := strings.ToUpper(hex.EncodeToString(sum[:]))
+		if computedFingerprint != fingerprint {
+			t.Errorf("certificate chain[%d]: computed fingerprint %s != stored fingerprint %s",
+				i, computedFingerprint, fingerprint)
+		}
+	}
+
+	t.Logf("Successfully captured %d certificate(s) in chain", len(res.CertificateChain))
+	t.Logf("Stored %d unique certificate(s) in PEM format", len(certs))
 }

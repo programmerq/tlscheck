@@ -6,10 +6,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/programmerq/tlscheck/internal/plan"
@@ -27,6 +29,8 @@ type Engine struct {
 	Timeout     time.Duration
 	RootCAs     *x509.CertPool
 	systemRoots *x509.CertPool
+	certs       map[string]string // fingerprint -> PEM
+	certsMu     sync.Mutex
 }
 
 // GetRootCAs returns the certificate pool currently configured for the engine.
@@ -43,6 +47,23 @@ func (e *Engine) SetRootCAs(pool *x509.CertPool) {
 		return
 	}
 	e.RootCAs = pool
+}
+
+// GetCertificates returns the map of certificates encountered during probing.
+// The map keys are SHA-256 fingerprints (uppercase hex), and the values are PEM-encoded certificates.
+func (e *Engine) GetCertificates() map[string]string {
+	if e == nil {
+		return nil
+	}
+	e.certsMu.Lock()
+	defer e.certsMu.Unlock()
+
+	// Return a copy to prevent external modifications
+	result := make(map[string]string, len(e.certs))
+	for k, v := range e.certs {
+		result[k] = v
+	}
+	return result
 }
 
 // Result captures the outcome of a single probe attempt.
@@ -62,6 +83,7 @@ type Result struct {
 	LeafIssuer         string           `json:"leaf_issuer,omitempty"`
 	LeafSANs           []string         `json:"leaf_sans,omitempty"`
 	LeafFingerprint    string           `json:"leaf_fingerprint,omitempty"`
+	CertificateChain   []string         `json:"certificate_chain,omitempty"`
 	Failure            *Failure         `json:"failure,omitempty"`
 }
 
@@ -76,6 +98,7 @@ func NewEngine() *Engine {
 	eng := &Engine{
 		Dialer:  &net.Dialer{Timeout: 10 * time.Second},
 		Timeout: 15 * time.Second,
+		certs:   make(map[string]string),
 	}
 
 	if pool, err := x509.SystemCertPool(); err == nil {
@@ -256,6 +279,29 @@ func (e *Engine) captureCertificateDetails(res *Result, state tls.ConnectionStat
 	}
 	if len(sans) > 0 {
 		res.LeafSANs = sans
+	}
+
+	// Capture the full certificate chain as fingerprints and store PEM data
+	chain := make([]string, 0, len(state.PeerCertificates))
+	e.certsMu.Lock()
+	defer e.certsMu.Unlock()
+
+	for _, cert := range state.PeerCertificates {
+		certSum := sha256.Sum256(cert.Raw)
+		fingerprint := strings.ToUpper(hex.EncodeToString(certSum[:]))
+		chain = append(chain, fingerprint)
+
+		// Store the PEM-encoded certificate if we haven't seen it before
+		if _, exists := e.certs[fingerprint]; !exists {
+			pemBlock := &pem.Block{
+				Type:  "CERTIFICATE",
+				Bytes: cert.Raw,
+			}
+			e.certs[fingerprint] = string(pem.EncodeToMemory(pemBlock))
+		}
+	}
+	if len(chain) > 0 {
+		res.CertificateChain = chain
 	}
 }
 

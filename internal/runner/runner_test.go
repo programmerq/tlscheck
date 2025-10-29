@@ -103,3 +103,74 @@ func TestExecuteRequiresDependencies(t *testing.T) {
 		t.Fatalf("Execute accepted nil engine")
 	}
 }
+
+type stubEngineWithCerts struct {
+	stubEngine
+	certs map[string]string
+}
+
+func (s *stubEngineWithCerts) GetCertificates() map[string]string {
+	return s.certs
+}
+
+func TestExecuteCertificateCollection(t *testing.T) {
+	t.Parallel()
+
+	opts := config.Options{PublicAddr: "proxy.example.com"}
+	expectedPlan := plan.Plan{Targets: []plan.ProbeTarget{{ServiceKey: "proxy_web"}}}
+
+	// Create a result with a certificate chain
+	result := probe.Result{
+		Target:           expectedPlan.Targets[0],
+		Attempt:          1,
+		LeafFingerprint:  "ABC123",
+		CertificateChain: []string{"ABC123", "DEF456"},
+	}
+
+	// Create an engine that implements CertificateCollector
+	expectedCerts := map[string]string{
+		"ABC123": "-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----\n",
+		"DEF456": "-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----\n",
+	}
+
+	builder := &stubBuilder{plan: expectedPlan}
+	engine := &stubEngineWithCerts{
+		stubEngine: stubEngine{results: []probe.Result{result}},
+		certs:      expectedCerts,
+	}
+
+	exec, err := Execute(context.Background(), opts, builder, engine)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	// Verify certificates are collected
+	if exec.Certs == nil {
+		t.Fatalf("expected Certs to be populated, got nil")
+	}
+
+	if !reflect.DeepEqual(exec.Certs, expectedCerts) {
+		t.Errorf("Certs mismatch:\n got %#v\nwant %#v", exec.Certs, expectedCerts)
+	}
+}
+
+func TestExecuteNoCertificates(t *testing.T) {
+	t.Parallel()
+
+	opts := config.Options{PublicAddr: "proxy.example.com"}
+	expectedPlan := plan.Plan{Targets: []plan.ProbeTarget{{ServiceKey: "proxy_web"}}}
+	expectedResults := []probe.Result{{Target: expectedPlan.Targets[0], Attempt: 1}}
+
+	builder := &stubBuilder{plan: expectedPlan}
+	engine := &stubEngine{results: expectedResults}
+
+	exec, err := Execute(context.Background(), opts, builder, engine)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	// Verify Certs is not set (or is empty) when engine doesn't implement CertificateCollector
+	if exec.Certs != nil && len(exec.Certs) > 0 {
+		t.Errorf("expected Certs to be empty or nil when engine doesn't collect certificates, got %#v", exec.Certs)
+	}
+}
