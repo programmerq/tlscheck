@@ -114,7 +114,10 @@ func TestDemonstrateProxyDuplication(t *testing.T) {
 		Proxy:             config.ProxySettings{},
 	}
 
-	plan1, _ := Build(opts1)
+	plan1, err := Build(opts1)
+	if err != nil {
+		t.Fatalf("failed to build plan without proxy: %v", err)
+	}
 	t.Logf("Number of targets: %d\n", len(plan1.Targets))
 
 	for i, target := range plan1.Targets {
@@ -136,7 +139,10 @@ func TestDemonstrateProxyDuplication(t *testing.T) {
 		},
 	}
 
-	plan2, _ := Build(opts2)
+	plan2, err := Build(opts2)
+	if err != nil {
+		t.Fatalf("failed to build plan with proxy: %v", err)
+	}
 	t.Logf("Number of targets: %d (DOUBLED!)\n", len(plan2.Targets))
 
 	for i, target := range plan2.Targets {
