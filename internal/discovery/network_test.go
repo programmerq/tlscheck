@@ -547,40 +547,40 @@ func TestUniqueStrings(t *testing.T) {
 }
 
 func TestNetworkJSONStructure(t *testing.T) {
-ctx := context.Background()
+	ctx := context.Background()
 
-// Set some test environment variables
-os.Setenv("HTTPS_PROXY", "https://proxy.example.com:8443")
-os.Setenv("HTTP_PROXY", "http://proxy.example.com:8080")
-os.Setenv("NO_PROXY", "localhost,127.0.0.1,.internal")
-defer os.Unsetenv("HTTPS_PROXY")
-defer os.Unsetenv("HTTP_PROXY")
-defer os.Unsetenv("NO_PROXY")
+	// Set some test environment variables
+	os.Setenv("HTTPS_PROXY", "https://proxy.example.com:8443")
+	os.Setenv("HTTP_PROXY", "http://proxy.example.com:8080")
+	os.Setenv("NO_PROXY", "localhost,127.0.0.1,.internal")
+	defer os.Unsetenv("HTTPS_PROXY")
+	defer os.Unsetenv("HTTP_PROXY")
+	defer os.Unsetenv("NO_PROXY")
 
-// Discover network information
-networkInfo := DiscoverNetwork(ctx)
+	// Discover network information
+	networkInfo := DiscoverNetwork(ctx)
 
-// Verify JSON can be marshaled
-data, err := json.Marshal(networkInfo)
-if err != nil {
-t.Fatalf("Failed to marshal network info to JSON: %v", err)
-}
+	// Verify JSON can be marshaled
+	data, err := json.Marshal(networkInfo)
+	if err != nil {
+		t.Fatalf("Failed to marshal network info to JSON: %v", err)
+	}
 
-// Verify we got some data
-if len(data) < 100 {
-t.Errorf("JSON output seems too small: %d bytes", len(data))
-}
+	// Verify we got some data
+	if len(data) < 100 {
+		t.Errorf("JSON output seems too small: %d bytes", len(data))
+	}
 
-// Unmarshal to verify structure
-var decoded NetworkInfo
-if err := json.Unmarshal(data, &decoded); err != nil {
-t.Fatalf("Failed to unmarshal network info: %v", err)
-}
+	// Unmarshal to verify structure
+	var decoded NetworkInfo
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Failed to unmarshal network info: %v", err)
+	}
 
-// Verify proxy config
-if decoded.ProxyConfig.Environment.HTTPSProxy != "https://proxy.example.com:8443" {
-t.Errorf("HTTPS_PROXY not captured correctly after JSON round-trip")
-}
+	// Verify proxy config
+	if decoded.ProxyConfig.Environment.HTTPSProxy != "https://proxy.example.com:8443" {
+		t.Errorf("HTTPS_PROXY not captured correctly after JSON round-trip")
+	}
 
-t.Logf("Successfully marshaled and unmarshaled NetworkInfo with %d bytes", len(data))
+	t.Logf("Successfully marshaled and unmarshaled NetworkInfo with %d bytes", len(data))
 }
