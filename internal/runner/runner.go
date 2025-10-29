@@ -27,11 +27,18 @@ type Engine interface {
 	Run(context.Context, plan.Plan) ([]probe.Result, error)
 }
 
+// CertificateCollector is an optional interface that probe engines may implement
+// to provide access to collected certificates.
+type CertificateCollector interface {
+	GetCertificates() map[string]string
+}
+
 // Execution captures the combination of the generated plan and the resulting probe outcomes.
 type Execution struct {
-	Arguments *config.Options `json:"arguments,omitempty"`
-	Plan      plan.Plan       `json:"plan"`
-	Results   []probe.Result  `json:"results"`
+	Arguments *config.Options   `json:"arguments,omitempty"`
+	Plan      plan.Plan         `json:"plan"`
+	Results   []probe.Result    `json:"results"`
+	Certs     map[string]string `json:"certs,omitempty"`
 }
 
 // Execute builds a probe plan using the supplied builder and executes it with the engine.
@@ -53,5 +60,15 @@ func Execute(ctx context.Context, opts config.Options, builder PlanBuilder, engi
 		return Execution{}, err
 	}
 
-	return Execution{Arguments: &opts, Plan: probePlan, Results: results}, nil
+	exec := Execution{Arguments: &opts, Plan: probePlan, Results: results}
+
+	// If the engine supports certificate collection, retrieve the certificates
+	if collector, ok := engine.(CertificateCollector); ok {
+		certs := collector.GetCertificates()
+		if len(certs) > 0 {
+			exec.Certs = certs
+		}
+	}
+
+	return exec, nil
 }
