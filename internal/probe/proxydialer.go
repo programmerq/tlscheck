@@ -80,18 +80,25 @@ func (pd *ProxyDialer) DialContext(ctx context.Context, network, address string)
 	}
 
 	// Read CONNECT response
+	// Note: We must not defer resp.Body.Close() here because the response body
+	// is connected to the underlying connection that we're about to return.
+	// Closing the response body would close our connection!
 	resp, err := http.ReadResponse(bufio.NewReader(conn), req)
 	if err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("reading CONNECT response: %w", err)
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		// Read and discard the response body for error responses
+		if resp.Body != nil {
+			resp.Body.Close()
+		}
 		conn.Close()
 		return nil, fmt.Errorf("proxy CONNECT failed: %s", resp.Status)
 	}
 
-	// Connection established through proxy
+	// For successful CONNECT, the response body should be empty and we must not close it.
+	// The connection is now ready for the TLS handshake.
 	return conn, nil
 }
