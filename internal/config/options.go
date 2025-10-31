@@ -21,6 +21,8 @@ type Options struct {
 	Proxy             ProxySettings `json:"proxy"`
 	ProfileSource     *ProfileInfo  `json:"profile_source,omitempty"`
 	HostCAPEM         []byte        `json:"-"`
+	ClientCertPEM     []byte        `json:"-"`
+	ClientKeyPEM      []byte        `json:"-"`
 }
 
 // ProxySettings captures HTTP(S) proxy configuration sourced from the environment.
