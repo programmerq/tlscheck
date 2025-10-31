@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -186,8 +187,11 @@ func cloneSlice(input []string) []string {
 
 // getDialer returns the appropriate dialer based on whether proxy should be used.
 func (e *Engine) getDialer(useProxy bool) Dialer {
+	fmt.Fprintf(os.Stderr, "[DEBUG] getDialer called: useProxy=%v, e.ProxyURL=%q\n", useProxy, e.ProxyURL)
+
 	// If proxy is not requested or not configured, use the default dialer
 	if !useProxy || e.ProxyURL == "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Using direct dialer (useProxy=%v, ProxyURL empty=%v)\n", useProxy, e.ProxyURL == "")
 		return e.Dialer
 	}
 
@@ -195,6 +199,7 @@ func (e *Engine) getDialer(useProxy bool) Dialer {
 	proxyURL, err := url.Parse(e.ProxyURL)
 	if err != nil {
 		// If proxy URL is invalid, fall back to default dialer
+		fmt.Fprintf(os.Stderr, "[DEBUG] Failed to parse proxy URL %q: %v\n", e.ProxyURL, err)
 		return e.Dialer
 	}
 
@@ -205,6 +210,7 @@ func (e *Engine) getDialer(useProxy bool) Dialer {
 		baseDialer = &net.Dialer{Timeout: 10 * time.Second}
 	}
 
+	fmt.Fprintf(os.Stderr, "[DEBUG] Creating ProxyDialer with URL: %s\n", proxyURL.String())
 	return &ProxyDialer{
 		Dialer:   baseDialer,
 		ProxyURL: proxyURL,

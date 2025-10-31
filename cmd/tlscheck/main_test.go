@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"math/big"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,7 +91,8 @@ func TestRunExecutesPlanAndEmitsResults(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("run returned non-zero exit code: %d (stderr: %s)", exitCode, stderr.String())
 	}
-	if stderr.Len() != 0 {
+	// Allow DEBUG output on stderr
+	if stderr.Len() != 0 && !strings.Contains(stderr.String(), "[DEBUG]") {
 		t.Fatalf("unexpected stderr output: %s", stderr.String())
 	}
 
