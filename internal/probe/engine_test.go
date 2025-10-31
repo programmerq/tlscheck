@@ -625,3 +625,203 @@ func TestEngineCertificateChainCapture(t *testing.T) {
 	t.Logf("Successfully captured %d certificate(s) in chain", len(res.CertificateChain))
 	t.Logf("Stored %d unique certificate(s) in PEM format", len(certs))
 }
+
+func TestEngineClientCertificate(t *testing.T) {
+	t.Parallel()
+
+	// Generate server certificate
+	serverCert, pool := generateServerCert(t, "teleport.example.com")
+
+	// Generate a client certificate
+	clientKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("failed to generate client key: %v", err)
+	}
+
+	clientCertTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(2),
+		Subject:      pkix.Name{CommonName: "test-user"},
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+
+	clientCertDER, err := x509.CreateCertificate(rand.Reader, clientCertTemplate, clientCertTemplate, &clientKey.PublicKey, clientKey)
+	if err != nil {
+		t.Fatalf("failed to create client certificate: %v", err)
+	}
+
+	clientCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientCertDER})
+	clientKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(clientKey)})
+
+	// Variable to capture whether client cert was presented
+	var clientCertPresented bool
+	var mu sync.Mutex
+
+	// Custom handler that checks connection state
+	handler := func(conn *tls.Conn) {
+		state := conn.ConnectionState()
+		mu.Lock()
+		clientCertPresented = len(state.PeerCertificates) > 0
+		mu.Unlock()
+	}
+
+	// Start TLS server that requests client certificate
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{serverCert},
+		NextProtos:   []string{"teleport-proxy-ssh-grpc"},
+		ClientAuth:   tls.RequestClientCert,
+	}
+
+	addr, cleanup := startTLSServer(t, tlsConfig, handler)
+	t.Cleanup(cleanup)
+
+	host, port := splitHostPort(t, addr)
+	target := plan.ProbeTarget{
+		ServiceKey:    "proxy_ssh_grpc",
+		Address:       host,
+		Port:          port,
+		PrimarySNI:    "teleport.example.com",
+		ALPNs:         []string{"teleport-proxy-ssh-grpc"},
+		Trust:         plan.TrustSystemRoots,
+		Repeat:        1,
+		UseClientCert: true,
+	}
+
+	engine := NewEngine()
+	engine.systemRoots = pool
+	engine.SetClientCert(clientCertPEM, clientKeyPEM)
+
+	probePlan := plan.Plan{Targets: []plan.ProbeTarget{target}}
+	results, err := engine.Run(context.Background(), probePlan)
+	if err != nil {
+		t.Fatalf("engine run failed: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+
+	res := results[0]
+	if res.Failure != nil {
+		t.Fatalf("probe failed: %s - %s", res.Failure.Kind, res.Failure.Message)
+	}
+
+	// Give the server handler a moment to record the client certificate
+	time.Sleep(100 * time.Millisecond)
+
+	mu.Lock()
+	presented := clientCertPresented
+	mu.Unlock()
+
+	if !presented {
+		t.Error("expected client certificate to be presented but it was not")
+	}
+
+	if res.NegotiatedProtocol != "teleport-proxy-ssh-grpc" {
+		t.Errorf("negotiated protocol = %q, want teleport-proxy-ssh-grpc", res.NegotiatedProtocol)
+	}
+
+	t.Log("Client certificate was successfully presented to server")
+}
+
+func TestEngineClientCertificateNotUsedWhenNotRequired(t *testing.T) {
+	t.Parallel()
+
+	// Generate server certificate
+	serverCert, pool := generateServerCert(t, "teleport.example.com")
+
+	// Generate a client certificate (but we won't use it)
+	clientKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("failed to generate client key: %v", err)
+	}
+
+	clientCertTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(2),
+		Subject:      pkix.Name{CommonName: "test-user"},
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+
+	clientCertDER, err := x509.CreateCertificate(rand.Reader, clientCertTemplate, clientCertTemplate, &clientKey.PublicKey, clientKey)
+	if err != nil {
+		t.Fatalf("failed to create client certificate: %v", err)
+	}
+
+	clientCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientCertDER})
+	clientKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(clientKey)})
+
+	// Variable to track if client cert was presented
+	var clientCertPresented bool
+	var mu sync.Mutex
+
+	// Custom handler that checks connection state
+	handler := func(conn *tls.Conn) {
+		state := conn.ConnectionState()
+		mu.Lock()
+		clientCertPresented = len(state.PeerCertificates) > 0
+		mu.Unlock()
+	}
+
+	// Start TLS server
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{serverCert},
+		NextProtos:   []string{"h2"},
+		ClientAuth:   tls.RequestClientCert,
+	}
+
+	addr, cleanup := startTLSServer(t, tlsConfig, handler)
+	t.Cleanup(cleanup)
+
+	host, port := splitHostPort(t, addr)
+	target := plan.ProbeTarget{
+		ServiceKey:    "proxy_web",
+		Address:       host,
+		Port:          port,
+		PrimarySNI:    "teleport.example.com",
+		ALPNs:         []string{"h2"},
+		Trust:         plan.TrustSystemRoots,
+		Repeat:        1,
+		UseClientCert: false, // This service should NOT use client cert
+	}
+
+	engine := NewEngine()
+	engine.systemRoots = pool
+	engine.SetClientCert(clientCertPEM, clientKeyPEM)
+
+	probePlan := plan.Plan{Targets: []plan.ProbeTarget{target}}
+	results, err := engine.Run(context.Background(), probePlan)
+	if err != nil {
+		t.Fatalf("engine run failed: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+
+	res := results[0]
+	if res.Failure != nil {
+		t.Fatalf("probe failed: %s - %s", res.Failure.Kind, res.Failure.Message)
+	}
+
+	// Give the server handler a moment to record (or not) the client certificate
+	time.Sleep(100 * time.Millisecond)
+
+	mu.Lock()
+	presented := clientCertPresented
+	mu.Unlock()
+
+	if presented {
+		t.Error("client certificate should NOT have been presented for proxy_web service")
+	}
+
+	if res.NegotiatedProtocol != "h2" {
+		t.Errorf("negotiated protocol = %q, want h2", res.NegotiatedProtocol)
+	}
+
+	t.Log("Client certificate was correctly NOT used when UseClientCert=false")
+}
