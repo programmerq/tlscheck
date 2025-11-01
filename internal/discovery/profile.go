@@ -21,12 +21,6 @@ type Profile struct {
 	WebProxyAddr string
 }
 
-// ClientCert holds the TLS client certificate and key for a profile.
-type ClientCert struct {
-	CertPEM []byte
-	KeyPEM  []byte
-}
-
 // ErrNoActiveProfile indicates that no active Teleport profile could be located.
 var ErrNoActiveProfile = errors.New("no active Teleport profile")
 
@@ -233,32 +227,4 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
-}
-
-// LoadClientCert attempts to load the TLS client certificate and key from the profile directory.
-// Returns nil if the certificate files don't exist or can't be read.
-func LoadClientCert(home, profileName string) *ClientCert {
-	if strings.TrimSpace(home) == "" || strings.TrimSpace(profileName) == "" {
-		return nil
-	}
-
-	// tsh stores user TLS certificates as <profile>-x509.pem in the profile directory
-	certPath := filepath.Join(home, "keys", profileName, fmt.Sprintf("%s-x509.pem", profileName))
-	keyPath := filepath.Join(home, "keys", profileName, profileName)
-
-	certPEM, certErr := os.ReadFile(certPath)
-	keyPEM, keyErr := os.ReadFile(keyPath)
-
-	if certErr != nil || keyErr != nil {
-		return nil
-	}
-
-	if len(certPEM) == 0 || len(keyPEM) == 0 {
-		return nil
-	}
-
-	return &ClientCert{
-		CertPEM: certPEM,
-		KeyPEM:  keyPEM,
-	}
 }

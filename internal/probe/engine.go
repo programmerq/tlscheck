@@ -25,14 +25,12 @@ type Dialer interface {
 
 // Engine executes probe targets against a Teleport proxy.
 type Engine struct {
-	Dialer        Dialer
-	Timeout       time.Duration
-	RootCAs       *x509.CertPool
-	systemRoots   *x509.CertPool
-	certs         map[string]string // fingerprint -> PEM
-	certsMu       sync.Mutex
-	ClientCertPEM []byte
-	ClientKeyPEM  []byte
+	Dialer      Dialer
+	Timeout     time.Duration
+	RootCAs     *x509.CertPool
+	systemRoots *x509.CertPool
+	certs       map[string]string // fingerprint -> PEM
+	certsMu     sync.Mutex
 }
 
 // GetRootCAs returns the certificate pool currently configured for the engine.
@@ -49,15 +47,6 @@ func (e *Engine) SetRootCAs(pool *x509.CertPool) {
 		return
 	}
 	e.RootCAs = pool
-}
-
-// SetClientCert configures the client certificate and key used for mutual TLS.
-func (e *Engine) SetClientCert(certPEM, keyPEM []byte) {
-	if e == nil {
-		return
-	}
-	e.ClientCertPEM = certPEM
-	e.ClientKeyPEM = keyPEM
 }
 
 // GetCertificates returns the map of certificates encountered during probing.
@@ -215,14 +204,6 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 		NextProtos:         target.ALPNs,
 		MinVersion:         tls.VersionTLS12,
 		InsecureSkipVerify: true,
-	}
-
-	// If the target requires a client certificate and we have one available, configure it
-	if target.UseClientCert && len(e.ClientCertPEM) > 0 && len(e.ClientKeyPEM) > 0 {
-		cert, err := tls.X509KeyPair(e.ClientCertPEM, e.ClientKeyPEM)
-		if err == nil {
-			tlsCfg.Certificates = []tls.Certificate{cert}
-		}
 	}
 
 	tlsConn := tls.Client(conn, tlsCfg)

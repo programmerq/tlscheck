@@ -35,7 +35,6 @@ type ProbeTarget struct {
 	InformationalOnly bool             `json:"informational_only,omitempty"`
 	Repeat            int              `json:"repeat"`
 	Notes             []string         `json:"notes,omitempty"`
-	UseClientCert     bool             `json:"use_client_cert,omitempty"`
 }
 
 // TrustStrategy describes which certificate authorities should be trusted for a probe target.
@@ -112,7 +111,6 @@ type serviceTemplate struct {
 	Base16Hint    bool
 	Informational func(config.Options) bool
 	Trust         TrustStrategy
-	UseClientCert bool
 }
 
 func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq []UpgradeAttempt) []ProbeTarget {
@@ -142,7 +140,6 @@ func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq
 			Trust:          trust,
 			Repeat:         opts.Repeat,
 			Notes:          cloneSlice(t.Notes),
-			UseClientCert:  t.UseClientCert,
 		}
 
 		if t.NeedsUpgrade {
@@ -245,7 +242,6 @@ var serviceTemplates = []serviceTemplate{
 		},
 		Informational: informationalWhenSeparateListeners,
 		Trust:         TrustHostCA,
-		UseClientCert: true,
 	},
 	{
 		Key:         "auth_via_proxy",
@@ -270,7 +266,6 @@ var serviceTemplates = []serviceTemplate{
 		},
 		Informational: informationalWhenSeparateListeners,
 		Trust:         TrustHostCA,
-		UseClientCert: true,
 	},
 	{
 		Key:         "kubernetes",
