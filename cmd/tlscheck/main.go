@@ -77,7 +77,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, deps depe
 	resolved, err := deps.resolveRuntime(ctx, opts)
 	if err != nil {
 		if errors.Is(err, config.ErrProxyServerRequired) {
-			fmt.Fprintln(stderr, "no active tsh profile. specify a proxy via --proxy-server")
+			teleportHome := os.Getenv("TELEPORT_HOME")
+			if teleportHome != "" {
+				fmt.Fprintf(stderr, "no active tsh profile found in TELEPORT_HOME=%s. specify a proxy via --proxy-server\n", teleportHome)
+			} else {
+				fmt.Fprintln(stderr, "no active tsh profile. specify a proxy via --proxy-server")
+			}
 			config.Usage()
 			return 2
 		}
