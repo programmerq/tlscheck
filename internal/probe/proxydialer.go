@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -33,11 +32,11 @@ func (bc *bufferedConn) Read(b []byte) (int, error) {
 
 // DialContext connects to the target address, optionally through an HTTP CONNECT proxy.
 func (pd *ProxyDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer.DialContext called: address=%s, proxyURL=%v\n", address, pd.ProxyURL)
+	// fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer.DialContext called: address=%s, proxyURL=%v\n", address, pd.ProxyURL)
 
 	if pd.ProxyURL == nil {
 		// No proxy configured, use direct connection
-		fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: ProxyURL is nil, using direct connection\n")
+		// fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: ProxyURL is nil, using direct connection\n")
 		if pd.Dialer != nil {
 			return pd.Dialer.DialContext(ctx, network, address)
 		}
@@ -61,10 +60,10 @@ func (pd *ProxyDialer) DialContext(ctx context.Context, network, address string)
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: Connecting to proxy %s for target %s\n", proxyAddr, address)
+	// fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: Connecting to proxy %s for target %s\n", proxyAddr, address)
 	conn, err := dialer.DialContext(ctx, network, proxyAddr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: Failed to connect to proxy: %v\n", err)
+		// fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: Failed to connect to proxy: %v\n", err)
 		return nil, fmt.Errorf("connecting to proxy %s: %w", proxyAddr, err)
 	}
 
@@ -91,10 +90,10 @@ func (pd *ProxyDialer) DialContext(ctx context.Context, network, address string)
 	}
 
 	// Write CONNECT request
-	fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: Sending CONNECT request to %s\n", address)
+	// fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: Sending CONNECT request to %s\n", address)
 	if err := req.Write(conn); err != nil {
 		conn.Close()
-		fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: Failed to write CONNECT request: %v\n", err)
+		// fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: Failed to write CONNECT request: %v\n", err)
 		return nil, fmt.Errorf("writing CONNECT request: %w", err)
 	}
 
@@ -104,35 +103,35 @@ func (pd *ProxyDialer) DialContext(ctx context.Context, network, address string)
 	// Closing the response body would close our connection!
 	// Also, we need to preserve the bufio.Reader because it may have buffered
 	// data beyond the HTTP response headers.
-	fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: Reading CONNECT response\n")
+	// fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: Reading CONNECT response\n")
 	br := bufio.NewReader(conn)
 	resp, err := http.ReadResponse(br, req)
 	if err != nil {
 		conn.Close()
-		fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: Failed to read CONNECT response: %v\n", err)
+		// fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: Failed to read CONNECT response: %v\n", err)
 		return nil, fmt.Errorf("reading CONNECT response: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: CONNECT response status: %s\n", resp.Status)
+	// fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: CONNECT response status: %s\n", resp.Status)
 	if resp.StatusCode != http.StatusOK {
 		// Read and discard the response body for error responses
 		if resp.Body != nil {
 			resp.Body.Close()
 		}
 		conn.Close()
-		fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: CONNECT failed with status %s\n", resp.Status)
+		// fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: CONNECT failed with status %s\n", resp.Status)
 		return nil, fmt.Errorf("proxy CONNECT failed: %s", resp.Status)
 	}
 
 	// For successful CONNECT, the response body should be empty and we must not close it.
 	// The connection is now ready for the TLS handshake.
 	// However, we need to return a connection that includes any buffered data.
-	fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: CONNECT successful, returning connection\n")
+	// fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: CONNECT successful, returning connection\n")
 
 	// If the buffered reader has buffered any data beyond the response headers,
 	// we need to wrap the connection to provide that data first.
 	if br.Buffered() > 0 {
-		fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: Reader has %d buffered bytes, wrapping connection\n", br.Buffered())
+		// fmt.Fprintf(os.Stderr, "[DEBUG] ProxyDialer: Reader has %d buffered bytes, wrapping connection\n", br.Buffered())
 		return &bufferedConn{
 			Reader: br,
 			Conn:   conn,

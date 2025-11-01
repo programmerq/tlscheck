@@ -100,16 +100,16 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, deps depe
 		if proxySetter, ok := engine.(interface{ SetProxyURL(string) }); ok {
 			// Prefer HTTPS_PROXY for HTTPS connections
 			if resolved.Proxy.HTTPSProxy != "" {
-				fmt.Fprintf(stderr, "[DEBUG] Setting engine proxy URL to: %s\n", resolved.Proxy.HTTPSProxy)
+				// fmt.Fprintf(stderr, "[DEBUG] Setting engine proxy URL to: %s\n", resolved.Proxy.HTTPSProxy)
 				proxySetter.SetProxyURL(resolved.Proxy.HTTPSProxy)
 			} else if resolved.Proxy.HTTPProxy != "" {
-				fmt.Fprintf(stderr, "[DEBUG] Setting engine proxy URL to: %s\n", resolved.Proxy.HTTPProxy)
+				// fmt.Fprintf(stderr, "[DEBUG] Setting engine proxy URL to: %s\n", resolved.Proxy.HTTPProxy)
 				proxySetter.SetProxyURL(resolved.Proxy.HTTPProxy)
 			} else {
-				fmt.Fprintf(stderr, "[DEBUG] No proxy configured in resolved options\n")
+				// fmt.Fprintf(stderr, "[DEBUG] No proxy configured in resolved options\n")
 			}
 		} else {
-			fmt.Fprintf(stderr, "[DEBUG] Engine does not support SetProxyURL interface\n")
+			// fmt.Fprintf(stderr, "[DEBUG] Engine does not support SetProxyURL interface\n")
 		}
 	}
 
