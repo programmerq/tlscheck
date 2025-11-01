@@ -240,6 +240,7 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 	defer conn.Close()
 	res.RemoteAddr = conn.RemoteAddr().String()
 	res.LocalAddr = conn.LocalAddr().String()
+	fmt.Fprintf(os.Stderr, "[DEBUG] Connection established: LocalAddr=%s, RemoteAddr=%s\n", res.LocalAddr, res.RemoteAddr)
 
 	if host, _, err := net.SplitHostPort(res.RemoteAddr); err == nil {
 		res.ResolvedIP = host
