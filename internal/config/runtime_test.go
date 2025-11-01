@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/programmerq/tlscheck/internal/discovery"
 )
 
 const runtimeHostCAPEM = "-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIUGzJrped1IovnHgwlHGhEq+y3OCkwCgYIKoZIzj0EAwIw\nFDESMBAGA1UEAwwJdGVzdC5jYS5pbyAwHhcNMjQwMTAxMDAwMDAwWhcNMzQwMTAx\nMDAwMDAwWjAUMRIwEAYDVQQDDAl0ZXN0LmNhLmlvMFkwEwYHKoZIzj0CAQYIKoZI\nzj0DAQcDQgAE6yOD87o5iV/mQJu1WDVYj1WFJsbgx5caX5/C/PObbIVdQydb9h9t\nW7x1YgnSUZXoqBYwygJyI072QtdgQXMMB6NTMFEwHQYDVR0OBBYEFNyEJD7BqXc9\n4HIX66D+QP9enZ5hMB8GA1UdIwQYMBaAFNyEJD7BqXc94HIX66D+QP9enZ5hMA8G\nA1UdEwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSAAwRQIgCZ3swaP42gnikIze8ihc\nYtL6vhfVqlhK/SXxPxq8npACIQDB0Gooy2cuglRez2oJ6TP2PzefDs2fzGEylh4G\nWXNoWA==\n-----END CERTIFICATE-----\n"
@@ -210,32 +212,11 @@ cluster: root.example.com
 		t.Fatalf("create keys directory: %v", err)
 	}
 
-	testCertPEM := []byte(`-----BEGIN CERTIFICATE-----
-MIIDZzCCAk+gAwIBAgIUNdCFWUdmXIB3fnOeRilfZvxULvEwDQYJKoZIhvcNAQEL
-BQAwQzEeMBwGA1UEAwwVdGVzdC11c2VyQGV4YW1wbGUuY29tMRQwEgYDVQQKDAtF
-eGFtcGxlIE9yZzELMAkGA1UEBhMCVVMwHhcNMjUxMTAxMDU1MzMzWhcNMjYxMTAx
-MDU1MzMzWjBDMR4wHAYDVQQDDBV0ZXN0LXVzZXJAZXhhbXBsZS5jb20xFDASBgNV
-BAoMC0V4YW1wbGUgT3JnMQswCQYDVQQGEwJVUzCCASIwDQYJKoZIhvcNAQEBBQAD
-ggEPADCCAQoCggEBAKCPV9QgPPs+uSFuZkipgPZh+pqpkWs2fWWhIUO4ZVs/RbnC
-Scc0zziKtiyHu7/Yitvu1UQR0iP+LRRS7VOAUMbFLdiMY96+RW2BlGOrIYoQUIxt
-+Rtpv+nhyE/a+XC59rA41M+XEos4UGn2gCjtCrUpWXHmeE6O+4+2S6h7RkQjdxae
-A8MLE4ZkW4jL43VhqaNjdqbdSsLw7+j+sYPc8VDZZPm3hWvkCqkK3SKnNQkz2NVA
-rsE8MHXXnsQLVkYjqKsFORd921eNjctVf9HHqM9N7Wpfb4p8wPwSWlNIg1Uwr6Lk
-FrXDOIwsOLnz0BE2ZOmTGVCZ+OG+oL/V+NR5tp0CAwEAAaNTMFEwHQYDVR0OBBYE
-FB4G4MKi+AVzHuFCDRlflyDatAOYMB8GA1UdIwQYMBaAFB4G4MKi+AVzHuFCDRlf
-lyDatAOYMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEBAHIzfHYi
-uDS+H7N6QxMwHYrHEnAGgvEKhnKxibcb9ACYSPFwdp25vJCIdOWLlOSTLFWVPcal
-c5oE2peIhkRjAWOWhYxRHZIjm3YjEjoQc8D5t23WJ69ahlos2Cq8KODJUk499TnP
-rqOaiBgLzGk+3Sq6bnPvt3X5j7zxCUY+jRBlVpSaUef0QrfGu1/2dKnuLKl+QboH
-sb0t0v2jZOgfG7QXqrbG4fhH+n8M0y2VC9ihEh9ISPtZyTFMYkHFHCXnHk1RHEh9
-68nZOLjPUbNxLQHgtwlDGduwp23pcJKTYe78pBdqPmQRIAeOcet7UD9si4UZuRXa
-kOO9XNfJLZo5MM8=
------END CERTIFICATE-----
-`)
-	testKeyPEM := []byte(`-----BEGIN PRIVATE KEY-----
-test key data
------END PRIVATE KEY-----
-`)
+	// Generate a test certificate dynamically to avoid expiry issues
+	testCertPEM, testKeyPEM, err := discovery.GenerateTestCertificate()
+	if err != nil {
+		t.Fatalf("generate test certificate: %v", err)
+	}
 
 	certPath := filepath.Join(keysDir, profileName+"-x509.pem")
 	keyPath := filepath.Join(keysDir, profileName)

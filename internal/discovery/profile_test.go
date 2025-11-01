@@ -135,30 +135,11 @@ func TestLoadClientCert(t *testing.T) {
 			t.Fatalf("failed to create keys directory: %v", err)
 		}
 
-		// Write test certificate and key - use a valid certificate for testing metadata
-		certPEM := []byte(`-----BEGIN CERTIFICATE-----
-MIIDZzCCAk+gAwIBAgIUNdCFWUdmXIB3fnOeRilfZvxULvEwDQYJKoZIhvcNAQEL
-BQAwQzEeMBwGA1UEAwwVdGVzdC11c2VyQGV4YW1wbGUuY29tMRQwEgYDVQQKDAtF
-eGFtcGxlIE9yZzELMAkGA1UEBhMCVVMwHhcNMjUxMTAxMDU1MzMzWhcNMjYxMTAx
-MDU1MzMzWjBDMR4wHAYDVQQDDBV0ZXN0LXVzZXJAZXhhbXBsZS5jb20xFDASBgNV
-BAoMC0V4YW1wbGUgT3JnMQswCQYDVQQGEwJVUzCCASIwDQYJKoZIhvcNAQEBBQAD
-ggEPADCCAQoCggEBAKCPV9QgPPs+uSFuZkipgPZh+pqpkWs2fWWhIUO4ZVs/RbnC
-Scc0zziKtiyHu7/Yitvu1UQR0iP+LRRS7VOAUMbFLdiMY96+RW2BlGOrIYoQUIxt
-+Rtpv+nhyE/a+XC59rA41M+XEos4UGn2gCjtCrUpWXHmeE6O+4+2S6h7RkQjdxae
-A8MLE4ZkW4jL43VhqaNjdqbdSsLw7+j+sYPc8VDZZPm3hWvkCqkK3SKnNQkz2NVA
-rsE8MHXXnsQLVkYjqKsFORd921eNjctVf9HHqM9N7Wpfb4p8wPwSWlNIg1Uwr6Lk
-FrXDOIwsOLnz0BE2ZOmTGVCZ+OG+oL/V+NR5tp0CAwEAAaNTMFEwHQYDVR0OBBYE
-FB4G4MKi+AVzHuFCDRlflyDatAOYMB8GA1UdIwQYMBaAFB4G4MKi+AVzHuFCDRlf
-lyDatAOYMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEBAHIzfHYi
-uDS+H7N6QxMwHYrHEnAGgvEKhnKxibcb9ACYSPFwdp25vJCIdOWLlOSTLFWVPcal
-c5oE2peIhkRjAWOWhYxRHZIjm3YjEjoQc8D5t23WJ69ahlos2Cq8KODJUk499TnP
-rqOaiBgLzGk+3Sq6bnPvt3X5j7zxCUY+jRBlVpSaUef0QrfGu1/2dKnuLKl+QboH
-sb0t0v2jZOgfG7QXqrbG4fhH+n8M0y2VC9ihEh9ISPtZyTFMYkHFHCXnHk1RHEh9
-68nZOLjPUbNxLQHgtwlDGduwp23pcJKTYe78pBdqPmQRIAeOcet7UD9si4UZuRXa
-kOO9XNfJLZo5MM8=
------END CERTIFICATE-----
-`)
-		keyPEM := []byte("-----BEGIN RSA PRIVATE KEY-----\ntest key\n-----END RSA PRIVATE KEY-----\n")
+		// Generate a test certificate dynamically to avoid expiry issues
+		certPEM, keyPEM, err := GenerateTestCertificate()
+		if err != nil {
+			t.Fatalf("failed to generate test certificate: %v", err)
+		}
 
 		certPath := filepath.Join(keysDir, profileName+"-x509.pem")
 		keyPath := filepath.Join(keysDir, profileName)
