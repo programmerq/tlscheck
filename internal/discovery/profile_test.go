@@ -3,6 +3,7 @@ package discovery
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -86,6 +87,41 @@ profiles:
 	}
 }
 
+func TestDefaultTeleportHome(t *testing.T) {
+	t.Run("uses TELEPORT_HOME when set", func(t *testing.T) {
+		customHome := "/custom/teleport/home"
+		t.Setenv("TELEPORT_HOME", customHome)
+
+		home := DefaultTeleportHome()
+		if home != customHome {
+			t.Errorf("DefaultTeleportHome() = %q, want %q", home, customHome)
+		}
+	})
+
+	t.Run("falls back to ~/.tsh when TELEPORT_HOME not set", func(t *testing.T) {
+		t.Setenv("TELEPORT_HOME", "")
+
+		home := DefaultTeleportHome()
+		// Should end with .tsh
+		if home == "" {
+			t.Error("DefaultTeleportHome() returned empty string")
+		}
+		if !strings.HasSuffix(home, ".tsh") {
+			t.Errorf("DefaultTeleportHome() = %q, expected to end with .tsh", home)
+		}
+	})
+
+	t.Run("trims whitespace from TELEPORT_HOME", func(t *testing.T) {
+		customHome := "/custom/teleport/home"
+		t.Setenv("TELEPORT_HOME", "  "+customHome+"  ")
+
+		home := DefaultTeleportHome()
+		if home != customHome {
+			t.Errorf("DefaultTeleportHome() = %q, want %q (should trim whitespace)", home, customHome)
+		}
+	})
+}
+
 func TestLoadClientCert(t *testing.T) {
 	t.Parallel()
 
@@ -99,8 +135,29 @@ func TestLoadClientCert(t *testing.T) {
 			t.Fatalf("failed to create keys directory: %v", err)
 		}
 
-		// Write test certificate and key
-		certPEM := []byte("-----BEGIN CERTIFICATE-----\ntest cert\n-----END CERTIFICATE-----\n")
+		// Write test certificate and key - use a valid certificate for testing metadata
+		certPEM := []byte(`-----BEGIN CERTIFICATE-----
+MIIDZzCCAk+gAwIBAgIUNdCFWUdmXIB3fnOeRilfZvxULvEwDQYJKoZIhvcNAQEL
+BQAwQzEeMBwGA1UEAwwVdGVzdC11c2VyQGV4YW1wbGUuY29tMRQwEgYDVQQKDAtF
+eGFtcGxlIE9yZzELMAkGA1UEBhMCVVMwHhcNMjUxMTAxMDU1MzMzWhcNMjYxMTAx
+MDU1MzMzWjBDMR4wHAYDVQQDDBV0ZXN0LXVzZXJAZXhhbXBsZS5jb20xFDASBgNV
+BAoMC0V4YW1wbGUgT3JnMQswCQYDVQQGEwJVUzCCASIwDQYJKoZIhvcNAQEBBQAD
+ggEPADCCAQoCggEBAKCPV9QgPPs+uSFuZkipgPZh+pqpkWs2fWWhIUO4ZVs/RbnC
+Scc0zziKtiyHu7/Yitvu1UQR0iP+LRRS7VOAUMbFLdiMY96+RW2BlGOrIYoQUIxt
++Rtpv+nhyE/a+XC59rA41M+XEos4UGn2gCjtCrUpWXHmeE6O+4+2S6h7RkQjdxae
+A8MLE4ZkW4jL43VhqaNjdqbdSsLw7+j+sYPc8VDZZPm3hWvkCqkK3SKnNQkz2NVA
+rsE8MHXXnsQLVkYjqKsFORd921eNjctVf9HHqM9N7Wpfb4p8wPwSWlNIg1Uwr6Lk
+FrXDOIwsOLnz0BE2ZOmTGVCZ+OG+oL/V+NR5tp0CAwEAAaNTMFEwHQYDVR0OBBYE
+FB4G4MKi+AVzHuFCDRlflyDatAOYMB8GA1UdIwQYMBaAFB4G4MKi+AVzHuFCDRlf
+lyDatAOYMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEBAHIzfHYi
+uDS+H7N6QxMwHYrHEnAGgvEKhnKxibcb9ACYSPFwdp25vJCIdOWLlOSTLFWVPcal
+c5oE2peIhkRjAWOWhYxRHZIjm3YjEjoQc8D5t23WJ69ahlos2Cq8KODJUk499TnP
+rqOaiBgLzGk+3Sq6bnPvt3X5j7zxCUY+jRBlVpSaUef0QrfGu1/2dKnuLKl+QboH
+sb0t0v2jZOgfG7QXqrbG4fhH+n8M0y2VC9ihEh9ISPtZyTFMYkHFHCXnHk1RHEh9
+68nZOLjPUbNxLQHgtwlDGduwp23pcJKTYe78pBdqPmQRIAeOcet7UD9si4UZuRXa
+kOO9XNfJLZo5MM8=
+-----END CERTIFICATE-----
+`)
 		keyPEM := []byte("-----BEGIN RSA PRIVATE KEY-----\ntest key\n-----END RSA PRIVATE KEY-----\n")
 
 		certPath := filepath.Join(keysDir, profileName+"-x509.pem")
@@ -124,6 +181,33 @@ func TestLoadClientCert(t *testing.T) {
 		}
 		if string(clientCert.KeyPEM) != string(keyPEM) {
 			t.Errorf("KeyPEM = %q, want %q", clientCert.KeyPEM, keyPEM)
+		}
+		if clientCert.CertPath != certPath {
+			t.Errorf("CertPath = %q, want %q", clientCert.CertPath, certPath)
+		}
+		if clientCert.KeyPath != keyPath {
+			t.Errorf("KeyPath = %q, want %q", clientCert.KeyPath, keyPath)
+		}
+
+		// Check certificate metadata parsing
+		if clientCert.Subject == "" {
+			t.Error("Subject should not be empty")
+		}
+		if !strings.Contains(clientCert.Subject, "test-user@example.com") {
+			t.Errorf("Subject = %q, should contain test-user@example.com", clientCert.Subject)
+		}
+		if clientCert.Issuer == "" {
+			t.Error("Issuer should not be empty")
+		}
+		if clientCert.NotBefore == "" {
+			t.Error("NotBefore should not be empty")
+		}
+		if clientCert.NotAfter == "" {
+			t.Error("NotAfter should not be empty")
+		}
+		// Verify it's in RFC3339 format
+		if !strings.Contains(clientCert.NotBefore, "T") {
+			t.Errorf("NotBefore = %q, expected RFC3339 format with 'T'", clientCert.NotBefore)
 		}
 	})
 

@@ -1,6 +1,8 @@
 package discovery
 
 import (
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net"
@@ -8,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -21,10 +24,16 @@ type Profile struct {
 	WebProxyAddr string
 }
 
-// ClientCert holds the TLS client certificate and key for a profile.
+// ClientCert holds the TLS client certificate and key for a profile, along with metadata.
 type ClientCert struct {
-	CertPEM []byte
-	KeyPEM  []byte
+	CertPEM   []byte
+	KeyPEM    []byte
+	CertPath  string
+	KeyPath   string
+	Subject   string
+	Issuer    string
+	NotBefore string
+	NotAfter  string
 }
 
 // ErrNoActiveProfile indicates that no active Teleport profile could be located.
@@ -257,8 +266,46 @@ func LoadClientCert(home, profileName string) *ClientCert {
 		return nil
 	}
 
-	return &ClientCert{
-		CertPEM: certPEM,
-		KeyPEM:  keyPEM,
+	result := &ClientCert{
+		CertPEM:  certPEM,
+		KeyPEM:   keyPEM,
+		CertPath: certPath,
+		KeyPath:  keyPath,
+	}
+
+	// Parse the certificate to extract metadata
+	if cert := parseCertificateMetadata(certPEM); cert != nil {
+		result.Subject = cert.Subject
+		result.Issuer = cert.Issuer
+		result.NotBefore = cert.NotBefore
+		result.NotAfter = cert.NotAfter
+	}
+
+	return result
+}
+
+type certMetadata struct {
+	Subject   string
+	Issuer    string
+	NotBefore string
+	NotAfter  string
+}
+
+func parseCertificateMetadata(certPEM []byte) *certMetadata {
+	block, _ := pem.Decode(certPEM)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return nil
+	}
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil
+	}
+
+	return &certMetadata{
+		Subject:   cert.Subject.String(),
+		Issuer:    cert.Issuer.String(),
+		NotBefore: cert.NotBefore.UTC().Format(time.RFC3339),
+		NotAfter:  cert.NotAfter.UTC().Format(time.RFC3339),
 	}
 }

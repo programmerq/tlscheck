@@ -10,19 +10,20 @@ import (
 
 // Options captures runtime inputs supplied via the CLI.
 type Options struct {
-	PublicAddr        string        `json:"public_addr"`
-	ClusterName       string        `json:"cluster_name"`
-	TeleportVersion   string        `json:"teleport_version"`
-	WebProxyPort      int           `json:"web_proxy_port,omitempty"`
-	TLSRoutingEnabled bool          `json:"tls_routing_enabled"`
-	Repeat            int           `json:"repeat"`
-	ServiceFilter     []string      `json:"service_filter,omitempty"`
-	IPAddresses       []string      `json:"ip_addresses,omitempty"`
-	Proxy             ProxySettings `json:"proxy"`
-	ProfileSource     *ProfileInfo  `json:"profile_source,omitempty"`
-	HostCAPEM         []byte        `json:"-"`
-	ClientCertPEM     []byte        `json:"-"`
-	ClientKeyPEM      []byte        `json:"-"`
+	PublicAddr        string          `json:"public_addr"`
+	ClusterName       string          `json:"cluster_name"`
+	TeleportVersion   string          `json:"teleport_version"`
+	WebProxyPort      int             `json:"web_proxy_port,omitempty"`
+	TLSRoutingEnabled bool            `json:"tls_routing_enabled"`
+	Repeat            int             `json:"repeat"`
+	ServiceFilter     []string        `json:"service_filter,omitempty"`
+	IPAddresses       []string        `json:"ip_addresses,omitempty"`
+	Proxy             ProxySettings   `json:"proxy"`
+	ProfileSource     *ProfileInfo    `json:"profile_source,omitempty"`
+	ClientCert        *ClientCertInfo `json:"client_cert,omitempty"`
+	HostCAPEM         []byte          `json:"-"`
+	ClientCertPEM     []byte          `json:"-"`
+	ClientKeyPEM      []byte          `json:"-"`
 }
 
 // ProxySettings captures HTTP(S) proxy configuration sourced from the environment.
@@ -36,6 +37,16 @@ type ProxySettings struct {
 type ProfileInfo struct {
 	Name string `json:"name"`
 	Path string `json:"path"`
+}
+
+// ClientCertInfo contains metadata about the client certificate used for mutual TLS.
+type ClientCertInfo struct {
+	CertPath  string `json:"cert_path"`
+	KeyPath   string `json:"key_path"`
+	Subject   string `json:"subject"`
+	Issuer    string `json:"issuer"`
+	NotBefore string `json:"not_before"`
+	NotAfter  string `json:"not_after"`
 }
 
 var usage func()

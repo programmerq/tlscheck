@@ -31,6 +31,14 @@ func ResolveRuntime(ctx context.Context, opts Options) (Options, error) {
 		if clientCert := discovery.LoadClientCert(home, profile.Name); clientCert != nil {
 			resolved.ClientCertPEM = clientCert.CertPEM
 			resolved.ClientKeyPEM = clientCert.KeyPEM
+			resolved.ClientCert = &ClientCertInfo{
+				CertPath:  clientCert.CertPath,
+				KeyPath:   clientCert.KeyPath,
+				Subject:   clientCert.Subject,
+				Issuer:    clientCert.Issuer,
+				NotBefore: clientCert.NotBefore,
+				NotAfter:  clientCert.NotAfter,
+			}
 		}
 	} else if resolved.PublicAddr == "" {
 		if errors.Is(profileErr, discovery.ErrNoActiveProfile) {
