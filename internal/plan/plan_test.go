@@ -400,3 +400,47 @@ func TestBuildWithoutIPAddresses(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildMarksClientCertServices(t *testing.T) {
+	t.Parallel()
+
+	opts := config.Options{
+		PublicAddr:        "cluster.example.com",
+		ClusterName:       "example",
+		TeleportVersion:   "v17.3.2",
+		Repeat:            1,
+		WebProxyPort:      443,
+		TLSRoutingEnabled: true,
+	}
+
+	plan, err := Build(opts)
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	// Services that should use client certs
+	shouldUseClientCert := map[string]bool{
+		"proxy_ssh_grpc": true,
+		"auth_via_proxy": true,
+	}
+
+	// Services that should NOT use client certs
+	shouldNotUseClientCert := map[string]bool{
+		"proxy_web":      true,
+		"reverse_tunnel": true,
+		"proxy_ssh":      true,
+	}
+
+	for _, target := range plan.Targets {
+		if shouldUseClientCert[target.ServiceKey] {
+			if !target.UseClientCert {
+				t.Errorf("service %s should have UseClientCert=true but got false", target.ServiceKey)
+			}
+		}
+		if shouldNotUseClientCert[target.ServiceKey] {
+			if target.UseClientCert {
+				t.Errorf("service %s should have UseClientCert=false but got true", target.ServiceKey)
+			}
+		}
+	}
+}

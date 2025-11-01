@@ -26,6 +26,12 @@ func ResolveRuntime(ctx context.Context, opts Options) (Options, error) {
 			resolved.PublicAddr = profile.PublicAddr
 		}
 		resolved.ProfileSource = &ProfileInfo{Name: profile.Name, Path: profile.Path}
+
+		// Try to load the client certificate for this profile
+		if clientCert := discovery.LoadClientCert(home, profile.Name); clientCert != nil {
+			resolved.ClientCertPEM = clientCert.CertPEM
+			resolved.ClientKeyPEM = clientCert.KeyPEM
+		}
 	} else if resolved.PublicAddr == "" {
 		if errors.Is(profileErr, discovery.ErrNoActiveProfile) {
 			return Options{}, ErrProxyServerRequired
