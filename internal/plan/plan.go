@@ -36,6 +36,7 @@ type ProbeTarget struct {
 	Repeat            int              `json:"repeat"`
 	Notes             []string         `json:"notes,omitempty"`
 	UseProxy          bool             `json:"use_proxy"`
+	UseClientCert     bool             `json:"use_client_cert,omitempty"`
 }
 
 // TrustStrategy describes which certificate authorities should be trusted for a probe target.

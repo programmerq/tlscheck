@@ -48,6 +48,10 @@ type rootCAAccessor interface {
 	SetRootCAs(*x509.CertPool)
 }
 
+type clientCertAccessor interface {
+	SetClientCert(certPEM, keyPEM []byte)
+}
+
 func run(ctx context.Context, args []string, stdout, stderr io.Writer, deps dependencies) int {
 	if stdout == nil {
 		stdout = io.Discard
@@ -110,6 +114,13 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, deps depe
 			}
 		} else {
 			// fmt.Fprintf(stderr, "[DEBUG] Engine does not support SetProxyURL interface\n")
+		}
+
+		// Configure client certificate if available
+		if accessor, ok := engine.(clientCertAccessor); ok {
+			if len(resolved.ClientCertPEM) > 0 && len(resolved.ClientKeyPEM) > 0 {
+				accessor.SetClientCert(resolved.ClientCertPEM, resolved.ClientKeyPEM)
+			}
 		}
 	}
 
