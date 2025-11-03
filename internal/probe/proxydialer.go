@@ -96,6 +96,8 @@ func (p *ProxyDialer) DialContext(ctx context.Context, network, address string) 
 
 	if resp.StatusCode != http.StatusOK {
 		conn.Close()
+		// Include proxy status in error for diagnostics. This is a diagnostic tool
+		// and operators need to see the actual proxy response for troubleshooting.
 		return nil, fmt.Errorf("proxy CONNECT failed: %s", resp.Status)
 	}
 

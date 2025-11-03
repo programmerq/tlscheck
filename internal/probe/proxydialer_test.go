@@ -98,7 +98,9 @@ func TestProxyDialerConnect(t *testing.T) {
 				if req.Method == "CONNECT" {
 					// Send success response
 					resp := "HTTP/1.1 200 Connection Established\r\n\r\n"
-					c.Write([]byte(resp))
+					if _, err := c.Write([]byte(resp)); err != nil {
+						return
+					}
 					// Keep connection open for TLS handshake
 					time.Sleep(100 * time.Millisecond)
 				}
