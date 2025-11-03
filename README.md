@@ -73,14 +73,19 @@ engine cannot complete an attempt (for example, handshake or ALPN negotiation fa
 emits the plan and annotates each failure with a descriptive `kind` and message so the underlying
 issue is obvious from the JSON.
 
-The command respects `HTTPS_PROXY`, `HTTP_PROXY`, and `NO_PROXY` to mirror `tsh` behaviour. Proxy
-settings are echoed back in the generated plan for traceability, and tlscheck automatically downloads
-the Teleport Host CA bundle from `/webapi/auth/export?type=tls-host`. Probes that depend on
-Teleport-issued credentials (`proxy_ssh`, `proxy_ssh_grpc`, `auth_via_proxy`, and `kubernetes`) pin to
-that bundle, while all other targets continue to use the operating system trust store. If the host
-bundle cannot be fetched, only the host-CA probes fail (with `host_ca_unavailable`) while still
-reporting the presented certificate details. All failures now capture certificate metadata even when
-verification fails so operators can inspect SANs and issuers for misconfigurations.
+The command respects `HTTPS_PROXY`, `HTTP_PROXY`, and `NO_PROXY` to mirror `tsh` behaviour. When a
+proxy is detected, tlscheck automatically runs all TLS probes **twice**: once using the configured
+proxy (via HTTP CONNECT), and once with a direct connection that bypasses the proxy. This dual
+execution allows operators to compare behavior in both scenarios and identify issues caused by MITM
+proxies or proxy misconfigurations. Each probe result indicates whether it used the proxy via
+`use_proxy` and `proxy_url` fields in the target configuration. Proxy settings are echoed back in the
+generated plan for traceability, and tlscheck automatically downloads the Teleport Host CA bundle from
+`/webapi/auth/export?type=tls-host`. Probes that depend on Teleport-issued credentials (`proxy_ssh`,
+`proxy_ssh_grpc`, `auth_via_proxy`, and `kubernetes`) pin to that bundle, while all other targets
+continue to use the operating system trust store. If the host bundle cannot be fetched, only the
+host-CA probes fail (with `host_ca_unavailable`) while still reporting the presented certificate
+details. All failures now capture certificate metadata even when verification fails so operators can
+inspect SANs and issuers for misconfigurations.
 
 ## Network Discovery
 
