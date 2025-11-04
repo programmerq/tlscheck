@@ -36,6 +36,8 @@ type ProbeTarget struct {
 	Repeat            int              `json:"repeat"`
 	Notes             []string         `json:"notes,omitempty"`
 	UseClientCert     bool             `json:"use_client_cert,omitempty"`
+	UseProxy          bool             `json:"use_proxy,omitempty"`
+	ProxyURL          string           `json:"proxy_url,omitempty"`
 }
 
 // TrustStrategy describes which certificate authorities should be trusted for a probe target.
@@ -96,6 +98,28 @@ func Build(opts config.Options) (Plan, error) {
 			remaining = append(remaining, key)
 		}
 		return Plan{}, fmt.Errorf("unknown services requested: %s", strings.Join(remaining, ", "))
+	}
+
+	// If a proxy is configured, duplicate all targets to test both with and without proxy
+	proxyURL := determineProxyURL(opts.Proxy)
+	if proxyURL != "" {
+		originalTargets := plan.Targets
+		plan.Targets = make([]ProbeTarget, 0, len(originalTargets)*2)
+
+		for _, target := range originalTargets {
+			// First, add the target with proxy
+			withProxy := target
+			withProxy.UseProxy = true
+			withProxy.ProxyURL = proxyURL
+			withProxy.Notes = append(cloneSlice(withProxy.Notes), "Using proxy: "+proxyURL)
+			plan.Targets = append(plan.Targets, withProxy)
+
+			// Then, add the target without proxy
+			withoutProxy := target
+			withoutProxy.UseProxy = false
+			withoutProxy.Notes = append(cloneSlice(withoutProxy.Notes), "Direct connection (bypassing proxy)")
+			plan.Targets = append(plan.Targets, withoutProxy)
+		}
 	}
 
 	return plan, nil
@@ -494,4 +518,16 @@ func makeUnique(values []string) []string {
 		out = append(out, v)
 	}
 	return out
+}
+
+// determineProxyURL selects the appropriate proxy URL from the proxy settings.
+// HTTPS_PROXY is preferred for TLS connections, falling back to HTTP_PROXY.
+func determineProxyURL(proxy config.ProxySettings) string {
+	if proxy.HTTPSProxy != "" {
+		return proxy.HTTPSProxy
+	}
+	if proxy.HTTPProxy != "" {
+		return proxy.HTTPProxy
+	}
+	return ""
 }

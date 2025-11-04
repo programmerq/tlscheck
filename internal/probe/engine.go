@@ -192,9 +192,21 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 	dialCtx, cancel := context.WithTimeout(ctx, e.Timeout)
 	defer cancel()
 
+	// Select the appropriate dialer based on whether proxy is requested
+	dialer := e.Dialer
+	if target.UseProxy && target.ProxyURL != "" {
+		proxyDialer, err := NewProxyDialer(target.ProxyURL, e.Timeout)
+		if err != nil {
+			res.TotalDuration = time.Since(startTime)
+			res.Failure = &Failure{Kind: "proxy_config_error", Message: fmt.Sprintf("invalid proxy configuration: %v", err)}
+			return res
+		}
+		dialer = proxyDialer
+	}
+
 	addr := net.JoinHostPort(target.Address, fmt.Sprintf("%d", target.Port))
 	dialStart := time.Now()
-	conn, err := e.Dialer.DialContext(dialCtx, "tcp", addr)
+	conn, err := dialer.DialContext(dialCtx, "tcp", addr)
 	dialEnd := time.Now()
 	res.DialDuration = dialEnd.Sub(dialStart)
 	if err != nil {

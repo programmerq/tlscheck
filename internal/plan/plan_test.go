@@ -444,3 +444,161 @@ func TestBuildMarksClientCertServices(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildDuplicatesTargetsWhenProxyConfigured(t *testing.T) {
+	t.Parallel()
+
+	// Test with proxy configured
+	optsWithProxy := config.Options{
+		PublicAddr:        "cluster.example.com",
+		ClusterName:       "example",
+		TeleportVersion:   "v17.3.2",
+		Repeat:            1,
+		WebProxyPort:      443,
+		TLSRoutingEnabled: true,
+		ServiceFilter:     []string{"proxy_web"},
+		Proxy: config.ProxySettings{
+			HTTPSProxy: "http://proxy.example.com:8080",
+		},
+	}
+
+	planWithProxy, err := Build(optsWithProxy)
+	if err != nil {
+		t.Fatalf("Build with proxy returned error: %v", err)
+	}
+
+	// Without proxy, we should have 1 target
+	optsWithoutProxy := optsWithProxy
+	optsWithoutProxy.Proxy = config.ProxySettings{}
+	planWithoutProxy, err := Build(optsWithoutProxy)
+	if err != nil {
+		t.Fatalf("Build without proxy returned error: %v", err)
+	}
+
+	if len(planWithoutProxy.Targets) == 0 {
+		t.Fatal("expected at least one target without proxy")
+	}
+
+	// With proxy, we should have 2x targets (with proxy + without proxy)
+	expectedTargets := len(planWithoutProxy.Targets) * 2
+	if len(planWithProxy.Targets) != expectedTargets {
+		t.Fatalf("expected %d targets with proxy (double), got %d", expectedTargets, len(planWithProxy.Targets))
+	}
+
+	// Verify that we have both proxy and non-proxy versions
+	var withProxyCount, withoutProxyCount int
+	for _, target := range planWithProxy.Targets {
+		if target.UseProxy {
+			withProxyCount++
+			if target.ProxyURL != "http://proxy.example.com:8080" {
+				t.Errorf("proxy target has wrong ProxyURL: got %q want %q",
+					target.ProxyURL, "http://proxy.example.com:8080")
+			}
+			// Check for proxy note
+			foundProxyNote := false
+			for _, note := range target.Notes {
+				if strings.Contains(note, "Using proxy") {
+					foundProxyNote = true
+					break
+				}
+			}
+			if !foundProxyNote {
+				t.Errorf("proxy target missing 'Using proxy' note")
+			}
+		} else {
+			withoutProxyCount++
+			// Check for direct connection note
+			foundDirectNote := false
+			for _, note := range target.Notes {
+				if strings.Contains(note, "Direct connection") {
+					foundDirectNote = true
+					break
+				}
+			}
+			if !foundDirectNote {
+				t.Errorf("direct target missing 'Direct connection' note")
+			}
+		}
+	}
+
+	if withProxyCount != len(planWithoutProxy.Targets) {
+		t.Errorf("expected %d proxy targets, got %d", len(planWithoutProxy.Targets), withProxyCount)
+	}
+	if withoutProxyCount != len(planWithoutProxy.Targets) {
+		t.Errorf("expected %d direct targets, got %d", len(planWithoutProxy.Targets), withoutProxyCount)
+	}
+}
+
+func TestBuildNoProxyDuplicationWithoutProxy(t *testing.T) {
+	t.Parallel()
+
+	opts := config.Options{
+		PublicAddr:        "cluster.example.com",
+		ClusterName:       "example",
+		TeleportVersion:   "v17.3.2",
+		Repeat:            1,
+		WebProxyPort:      443,
+		TLSRoutingEnabled: true,
+		ServiceFilter:     []string{"proxy_web"},
+	}
+
+	plan, err := Build(opts)
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	// Should have exactly 1 target since no proxy is configured
+	if len(plan.Targets) != 1 {
+		t.Fatalf("expected 1 target without proxy, got %d", len(plan.Targets))
+	}
+
+	target := plan.Targets[0]
+	if target.UseProxy {
+		t.Error("target should not use proxy when no proxy configured")
+	}
+	if target.ProxyURL != "" {
+		t.Errorf("target should have empty ProxyURL, got %q", target.ProxyURL)
+	}
+}
+
+func TestDetermineProxyURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		settings config.ProxySettings
+		want     string
+	}{
+		{
+			name: "HTTPS proxy preferred",
+			settings: config.ProxySettings{
+				HTTPSProxy: "https://secure-proxy:8443",
+				HTTPProxy:  "http://insecure-proxy:8080",
+			},
+			want: "https://secure-proxy:8443",
+		},
+		{
+			name: "HTTP proxy fallback",
+			settings: config.ProxySettings{
+				HTTPProxy: "http://proxy:8080",
+			},
+			want: "http://proxy:8080",
+		},
+		{
+			name:     "no proxy",
+			settings: config.ProxySettings{},
+			want:     "",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := determineProxyURL(tt.settings)
+			if got != tt.want {
+				t.Errorf("determineProxyURL() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
