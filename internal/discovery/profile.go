@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
@@ -26,14 +27,26 @@ type Profile struct {
 
 // ClientCert holds the TLS client certificate and key for a profile, along with metadata.
 type ClientCert struct {
-	CertPEM   []byte
-	KeyPEM    []byte
-	CertPath  string
-	KeyPath   string
-	Subject   string
-	Issuer    string
-	NotBefore string
-	NotAfter  string
+	CertPEM        []byte
+	KeyPEM         []byte
+	CertPath       string
+	KeyPath        string
+	Fingerprint    string
+	Subject        string
+	Issuer         string
+	NotBefore      string
+	NotAfter       string
+	SerialNumber   string
+	SignatureAlgo  string
+	PublicKeyAlgo  string
+	KeyUsage       []string
+	ExtKeyUsage    []string
+	DNSNames       []string
+	EmailAddresses []string
+	IPAddresses    []string
+	URIs           []string
+	IsCA           bool
+	Extensions     []certExtension
 }
 
 // ErrNoActiveProfile indicates that no active Teleport profile could be located.
@@ -275,20 +288,50 @@ func LoadClientCert(home, profileName string) *ClientCert {
 
 	// Parse the certificate to extract metadata
 	if cert := parseCertificateMetadata(certPEM); cert != nil {
+		result.Fingerprint = cert.Fingerprint
 		result.Subject = cert.Subject
 		result.Issuer = cert.Issuer
 		result.NotBefore = cert.NotBefore
 		result.NotAfter = cert.NotAfter
+		result.SerialNumber = cert.SerialNumber
+		result.SignatureAlgo = cert.SignatureAlgo
+		result.PublicKeyAlgo = cert.PublicKeyAlgo
+		result.KeyUsage = cert.KeyUsage
+		result.ExtKeyUsage = cert.ExtKeyUsage
+		result.DNSNames = cert.DNSNames
+		result.EmailAddresses = cert.EmailAddresses
+		result.IPAddresses = cert.IPAddresses
+		result.URIs = cert.URIs
+		result.IsCA = cert.IsCA
+		result.Extensions = cert.Extensions
 	}
 
 	return result
 }
 
 type certMetadata struct {
-	Subject   string
-	Issuer    string
-	NotBefore string
-	NotAfter  string
+	Fingerprint    string
+	Subject        string
+	Issuer         string
+	NotBefore      string
+	NotAfter       string
+	SerialNumber   string
+	SignatureAlgo  string
+	PublicKeyAlgo  string
+	KeyUsage       []string
+	ExtKeyUsage    []string
+	DNSNames       []string
+	EmailAddresses []string
+	IPAddresses    []string
+	URIs           []string
+	IsCA           bool
+	Extensions     []certExtension
+}
+
+type certExtension struct {
+	OID      string
+	Critical bool
+	Value    string
 }
 
 func parseCertificateMetadata(certPEM []byte) *certMetadata {
@@ -302,10 +345,122 @@ func parseCertificateMetadata(certPEM []byte) *certMetadata {
 		return nil
 	}
 
-	return &certMetadata{
-		Subject:   cert.Subject.String(),
-		Issuer:    cert.Issuer.String(),
-		NotBefore: cert.NotBefore.UTC().Format(time.RFC3339),
-		NotAfter:  cert.NotAfter.UTC().Format(time.RFC3339),
+	// Calculate fingerprint (SHA-256)
+	fingerprint := fmt.Sprintf("%X", sha256.Sum256(cert.Raw))
+
+	// Parse key usage
+	keyUsages := parseKeyUsage(cert.KeyUsage)
+
+	// Parse extended key usage
+	extKeyUsages := parseExtKeyUsage(cert.ExtKeyUsage)
+
+	// Convert IP addresses to strings
+	ipAddresses := make([]string, len(cert.IPAddresses))
+	for i, ip := range cert.IPAddresses {
+		ipAddresses[i] = ip.String()
 	}
+
+	// Convert URIs to strings
+	uris := make([]string, len(cert.URIs))
+	for i, uri := range cert.URIs {
+		uris[i] = uri.String()
+	}
+
+	// Parse extensions
+	extensions := make([]certExtension, 0, len(cert.Extensions))
+	for _, ext := range cert.Extensions {
+		extensions = append(extensions, certExtension{
+			OID:      ext.Id.String(),
+			Critical: ext.Critical,
+			Value:    fmt.Sprintf("%X", ext.Value),
+		})
+	}
+
+	return &certMetadata{
+		Fingerprint:    fingerprint,
+		Subject:        cert.Subject.String(),
+		Issuer:         cert.Issuer.String(),
+		NotBefore:      cert.NotBefore.UTC().Format(time.RFC3339),
+		NotAfter:       cert.NotAfter.UTC().Format(time.RFC3339),
+		SerialNumber:   cert.SerialNumber.String(),
+		SignatureAlgo:  cert.SignatureAlgorithm.String(),
+		PublicKeyAlgo:  cert.PublicKeyAlgorithm.String(),
+		KeyUsage:       keyUsages,
+		ExtKeyUsage:    extKeyUsages,
+		DNSNames:       cert.DNSNames,
+		EmailAddresses: cert.EmailAddresses,
+		IPAddresses:    ipAddresses,
+		URIs:           uris,
+		IsCA:           cert.IsCA,
+		Extensions:     extensions,
+	}
+}
+
+func parseKeyUsage(usage x509.KeyUsage) []string {
+	var usages []string
+	if usage&x509.KeyUsageDigitalSignature != 0 {
+		usages = append(usages, "DigitalSignature")
+	}
+	if usage&x509.KeyUsageContentCommitment != 0 {
+		usages = append(usages, "ContentCommitment")
+	}
+	if usage&x509.KeyUsageKeyEncipherment != 0 {
+		usages = append(usages, "KeyEncipherment")
+	}
+	if usage&x509.KeyUsageDataEncipherment != 0 {
+		usages = append(usages, "DataEncipherment")
+	}
+	if usage&x509.KeyUsageKeyAgreement != 0 {
+		usages = append(usages, "KeyAgreement")
+	}
+	if usage&x509.KeyUsageCertSign != 0 {
+		usages = append(usages, "CertSign")
+	}
+	if usage&x509.KeyUsageCRLSign != 0 {
+		usages = append(usages, "CRLSign")
+	}
+	if usage&x509.KeyUsageEncipherOnly != 0 {
+		usages = append(usages, "EncipherOnly")
+	}
+	if usage&x509.KeyUsageDecipherOnly != 0 {
+		usages = append(usages, "DecipherOnly")
+	}
+	return usages
+}
+
+func parseExtKeyUsage(usage []x509.ExtKeyUsage) []string {
+	var usages []string
+	for _, u := range usage {
+		switch u {
+		case x509.ExtKeyUsageAny:
+			usages = append(usages, "Any")
+		case x509.ExtKeyUsageServerAuth:
+			usages = append(usages, "ServerAuth")
+		case x509.ExtKeyUsageClientAuth:
+			usages = append(usages, "ClientAuth")
+		case x509.ExtKeyUsageCodeSigning:
+			usages = append(usages, "CodeSigning")
+		case x509.ExtKeyUsageEmailProtection:
+			usages = append(usages, "EmailProtection")
+		case x509.ExtKeyUsageIPSECEndSystem:
+			usages = append(usages, "IPSECEndSystem")
+		case x509.ExtKeyUsageIPSECTunnel:
+			usages = append(usages, "IPSECTunnel")
+		case x509.ExtKeyUsageIPSECUser:
+			usages = append(usages, "IPSECUser")
+		case x509.ExtKeyUsageTimeStamping:
+			usages = append(usages, "TimeStamping")
+		case x509.ExtKeyUsageOCSPSigning:
+			usages = append(usages, "OCSPSigning")
+		case x509.ExtKeyUsageMicrosoftServerGatedCrypto:
+			usages = append(usages, "MicrosoftServerGatedCrypto")
+		case x509.ExtKeyUsageNetscapeServerGatedCrypto:
+			usages = append(usages, "NetscapeServerGatedCrypto")
+		case x509.ExtKeyUsageMicrosoftCommercialCodeSigning:
+			usages = append(usages, "MicrosoftCommercialCodeSigning")
+		case x509.ExtKeyUsageMicrosoftKernelCodeSigning:
+			usages = append(usages, "MicrosoftKernelCodeSigning")
+		}
+	}
+	return usages
 }

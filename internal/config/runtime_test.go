@@ -256,12 +256,33 @@ cluster: root.example.com
 	if resolved.ClientCert.NotAfter == "" {
 		t.Error("ClientCert.NotAfter should not be empty")
 	}
+	if resolved.ClientCert.Fingerprint == "" {
+		t.Error("ClientCert.Fingerprint should not be empty")
+	}
+	if resolved.ClientCert.SerialNumber == "" {
+		t.Error("ClientCert.SerialNumber should not be empty")
+	}
+	if resolved.ClientCert.SignatureAlgo == "" {
+		t.Error("ClientCert.SignatureAlgo should not be empty")
+	}
+	if resolved.ClientCert.PublicKeyAlgo == "" {
+		t.Error("ClientCert.PublicKeyAlgo should not be empty")
+	}
 
 	t.Logf("Client cert info successfully loaded:")
+	t.Logf("  CertPath: %s", resolved.ClientCert.CertPath)
+	t.Logf("  KeyPath: %s", resolved.ClientCert.KeyPath)
+	t.Logf("  Fingerprint: %s", resolved.ClientCert.Fingerprint)
 	t.Logf("  Subject: %s", resolved.ClientCert.Subject)
 	t.Logf("  Issuer: %s", resolved.ClientCert.Issuer)
 	t.Logf("  NotBefore: %s", resolved.ClientCert.NotBefore)
 	t.Logf("  NotAfter: %s", resolved.ClientCert.NotAfter)
+	t.Logf("  SerialNumber: %s", resolved.ClientCert.SerialNumber)
+	t.Logf("  SignatureAlgo: %s", resolved.ClientCert.SignatureAlgo)
+	t.Logf("  PublicKeyAlgo: %s", resolved.ClientCert.PublicKeyAlgo)
+	t.Logf("  KeyUsage: %v", resolved.ClientCert.KeyUsage)
+	t.Logf("  ExtKeyUsage: %v", resolved.ClientCert.ExtKeyUsage)
+	t.Logf("  Extensions count: %d", len(resolved.ClientCert.Extensions))
 }
 
 func TestResolveRuntimeFailsWhenHostCAUnavailable(t *testing.T) {

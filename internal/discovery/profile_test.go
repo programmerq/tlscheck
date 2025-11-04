@@ -190,6 +190,40 @@ func TestLoadClientCert(t *testing.T) {
 		if !strings.Contains(clientCert.NotBefore, "T") {
 			t.Errorf("NotBefore = %q, expected RFC3339 format with 'T'", clientCert.NotBefore)
 		}
+
+		// Check additional metadata fields
+		if clientCert.Fingerprint == "" {
+			t.Error("Fingerprint should not be empty")
+		}
+		if clientCert.SerialNumber == "" {
+			t.Error("SerialNumber should not be empty")
+		}
+		if clientCert.SignatureAlgo == "" {
+			t.Error("SignatureAlgo should not be empty")
+		}
+		if clientCert.PublicKeyAlgo == "" {
+			t.Error("PublicKeyAlgo should not be empty")
+		}
+
+		// ExtKeyUsage should include ClientAuth for our test cert
+		hasClientAuth := false
+		for _, usage := range clientCert.ExtKeyUsage {
+			if usage == "ClientAuth" {
+				hasClientAuth = true
+				break
+			}
+		}
+		if !hasClientAuth {
+			t.Errorf("ExtKeyUsage = %v, expected to contain ClientAuth", clientCert.ExtKeyUsage)
+		}
+
+		t.Logf("Certificate fingerprint: %s", clientCert.Fingerprint)
+		t.Logf("Serial number: %s", clientCert.SerialNumber)
+		t.Logf("Signature algorithm: %s", clientCert.SignatureAlgo)
+		t.Logf("Public key algorithm: %s", clientCert.PublicKeyAlgo)
+		t.Logf("Key usage: %v", clientCert.KeyUsage)
+		t.Logf("Extended key usage: %v", clientCert.ExtKeyUsage)
+		t.Logf("Extensions count: %d", len(clientCert.Extensions))
 	})
 
 	t.Run("returns nil when cert file missing", func(t *testing.T) {

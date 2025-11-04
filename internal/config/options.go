@@ -41,12 +41,31 @@ type ProfileInfo struct {
 
 // ClientCertInfo contains metadata about the client certificate used for mutual TLS.
 type ClientCertInfo struct {
-	CertPath  string `json:"cert_path"`
-	KeyPath   string `json:"key_path"`
-	Subject   string `json:"subject"`
-	Issuer    string `json:"issuer"`
-	NotBefore string `json:"not_before"`
-	NotAfter  string `json:"not_after"`
+	CertPath       string          `json:"cert_path"`
+	KeyPath        string          `json:"key_path"`
+	Fingerprint    string          `json:"fingerprint"`
+	Subject        string          `json:"subject"`
+	Issuer         string          `json:"issuer"`
+	NotBefore      string          `json:"not_before"`
+	NotAfter       string          `json:"not_after"`
+	SerialNumber   string          `json:"serial_number"`
+	SignatureAlgo  string          `json:"signature_algorithm"`
+	PublicKeyAlgo  string          `json:"public_key_algorithm"`
+	KeyUsage       []string        `json:"key_usage,omitempty"`
+	ExtKeyUsage    []string        `json:"ext_key_usage,omitempty"`
+	DNSNames       []string        `json:"dns_names,omitempty"`
+	EmailAddresses []string        `json:"email_addresses,omitempty"`
+	IPAddresses    []string        `json:"ip_addresses,omitempty"`
+	URIs           []string        `json:"uris,omitempty"`
+	IsCA           bool            `json:"is_ca"`
+	Extensions     []CertExtension `json:"extensions,omitempty"`
+}
+
+// CertExtension represents a certificate extension.
+type CertExtension struct {
+	OID      string `json:"oid"`
+	Critical bool   `json:"critical"`
+	Value    string `json:"value"` // hex-encoded value
 }
 
 var usage func()
