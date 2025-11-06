@@ -346,7 +346,8 @@ func parseCertificateMetadata(certPEM []byte) *certMetadata {
 	}
 
 	// Calculate fingerprint (SHA-256)
-	fingerprint := fmt.Sprintf("%X", sha256.Sum256(cert.Raw))
+	sum := sha256.Sum256(cert.Raw)
+	fingerprint := fmt.Sprintf("%X", sum[:])
 
 	// Parse key usage
 	keyUsages := parseKeyUsage(cert.KeyUsage)

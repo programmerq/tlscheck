@@ -20,7 +20,7 @@ type Options struct {
 	IPAddresses       []string        `json:"ip_addresses,omitempty"`
 	Proxy             ProxySettings   `json:"proxy"`
 	ProfileSource     *ProfileInfo    `json:"profile_source,omitempty"`
-	ClientCert        *ClientCertInfo `json:"client_cert,omitempty"`
+	ClientCert        *ClientCertInfo `json:"-"` // Client cert info moved to top-level client_certs
 	HostCAPEM         []byte          `json:"-"`
 	ClientCertPEM     []byte          `json:"-"`
 	ClientKeyPEM      []byte          `json:"-"`

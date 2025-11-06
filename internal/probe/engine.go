@@ -25,14 +25,15 @@ type Dialer interface {
 
 // Engine executes probe targets against a Teleport proxy.
 type Engine struct {
-	Dialer        Dialer
-	Timeout       time.Duration
-	RootCAs       *x509.CertPool
-	systemRoots   *x509.CertPool
-	certs         map[string]string // fingerprint -> PEM
-	certsMu       sync.Mutex
-	ClientCertPEM []byte
-	ClientKeyPEM  []byte
+	Dialer                Dialer
+	Timeout               time.Duration
+	RootCAs               *x509.CertPool
+	systemRoots           *x509.CertPool
+	certs                 map[string]string // fingerprint -> PEM
+	certsMu               sync.Mutex
+	ClientCertPEM         []byte
+	ClientKeyPEM          []byte
+	clientCertFingerprint string
 }
 
 // GetRootCAs returns the certificate pool currently configured for the engine.
@@ -58,6 +59,18 @@ func (e *Engine) SetClientCert(certPEM, keyPEM []byte) {
 	}
 	e.ClientCertPEM = certPEM
 	e.ClientKeyPEM = keyPEM
+
+	// Calculate and store the client cert fingerprint
+	if len(certPEM) > 0 {
+		block, _ := pem.Decode(certPEM)
+		if block != nil && block.Type == "CERTIFICATE" {
+			cert, err := x509.ParseCertificate(block.Bytes)
+			if err == nil {
+				sum := sha256.Sum256(cert.Raw)
+				e.clientCertFingerprint = strings.ToUpper(hex.EncodeToString(sum[:]))
+			}
+		}
+	}
 }
 
 // GetCertificates returns the map of certificates encountered during probing.
@@ -77,25 +90,38 @@ func (e *Engine) GetCertificates() map[string]string {
 	return result
 }
 
+// GetClientCertificates returns the client certificate if configured.
+// The map keys are SHA-256 fingerprints (uppercase hex), and the values are PEM-encoded certificates.
+func (e *Engine) GetClientCertificates() map[string]string {
+	if e == nil || len(e.ClientCertPEM) == 0 || e.clientCertFingerprint == "" {
+		return nil
+	}
+
+	return map[string]string{
+		e.clientCertFingerprint: string(e.ClientCertPEM),
+	}
+}
+
 // Result captures the outcome of a single probe attempt.
 type Result struct {
-	Target             plan.ProbeTarget `json:"target"`
-	Attempt            int              `json:"attempt"`
-	LocalAddr          string           `json:"local_addr,omitempty"`
-	RemoteAddr         string           `json:"remote_addr,omitempty"`
-	ResolvedIP         string           `json:"resolved_ip,omitempty"`
-	DialDuration       time.Duration    `json:"dial_duration_ms,omitempty"`
-	HandshakeDuration  time.Duration    `json:"handshake_duration_ms,omitempty"`
-	TotalDuration      time.Duration    `json:"total_duration_ms,omitempty"`
-	TLSVersion         string           `json:"tls_version,omitempty"`
-	CipherSuite        string           `json:"cipher_suite,omitempty"`
-	NegotiatedProtocol string           `json:"negotiated_protocol,omitempty"`
-	LeafSubject        string           `json:"leaf_subject,omitempty"`
-	LeafIssuer         string           `json:"leaf_issuer,omitempty"`
-	LeafSANs           []string         `json:"leaf_sans,omitempty"`
-	LeafFingerprint    string           `json:"leaf_fingerprint,omitempty"`
-	CertificateChain   []string         `json:"certificate_chain,omitempty"`
-	Failure            *Failure         `json:"failure,omitempty"`
+	Target                plan.ProbeTarget `json:"target"`
+	Attempt               int              `json:"attempt"`
+	LocalAddr             string           `json:"local_addr,omitempty"`
+	RemoteAddr            string           `json:"remote_addr,omitempty"`
+	ResolvedIP            string           `json:"resolved_ip,omitempty"`
+	DialDuration          time.Duration    `json:"dial_duration_ms,omitempty"`
+	HandshakeDuration     time.Duration    `json:"handshake_duration_ms,omitempty"`
+	TotalDuration         time.Duration    `json:"total_duration_ms,omitempty"`
+	TLSVersion            string           `json:"tls_version,omitempty"`
+	CipherSuite           string           `json:"cipher_suite,omitempty"`
+	NegotiatedProtocol    string           `json:"negotiated_protocol,omitempty"`
+	LeafSubject           string           `json:"leaf_subject,omitempty"`
+	LeafIssuer            string           `json:"leaf_issuer,omitempty"`
+	LeafSANs              []string         `json:"leaf_sans,omitempty"`
+	LeafFingerprint       string           `json:"leaf_fingerprint,omitempty"`
+	CertificateChain      []string         `json:"certificate_chain,omitempty"`
+	ClientCertFingerprint string           `json:"client_cert_fingerprint,omitempty"`
+	Failure               *Failure         `json:"failure,omitempty"`
 }
 
 // Failure describes a classified probe error.
@@ -234,6 +260,10 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 		cert, err := tls.X509KeyPair(e.ClientCertPEM, e.ClientKeyPEM)
 		if err == nil {
 			tlsCfg.Certificates = []tls.Certificate{cert}
+			// Set the client cert fingerprint in the result
+			if e.clientCertFingerprint != "" {
+				res.ClientCertFingerprint = e.clientCertFingerprint
+			}
 		}
 	}
 

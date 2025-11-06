@@ -34,13 +34,20 @@ type CertificateCollector interface {
 	GetCertificates() map[string]string
 }
 
+// ClientCertificateCollector is an optional interface that probe engines may implement
+// to provide access to configured client certificates.
+type ClientCertificateCollector interface {
+	GetClientCertificates() map[string]string
+}
+
 // Execution captures the combination of the generated plan and the resulting probe outcomes.
 type Execution struct {
-	Arguments *config.Options        `json:"arguments,omitempty"`
-	Network   *discovery.NetworkInfo `json:"network,omitempty"`
-	Plan      plan.Plan              `json:"plan"`
-	Results   []probe.Result         `json:"results"`
-	Certs     map[string]string      `json:"certs,omitempty"`
+	Arguments   *config.Options        `json:"arguments,omitempty"`
+	Network     *discovery.NetworkInfo `json:"network,omitempty"`
+	Plan        plan.Plan              `json:"plan"`
+	Results     []probe.Result         `json:"results"`
+	Certs       map[string]string      `json:"certs,omitempty"`
+	ClientCerts map[string]string      `json:"client_certs,omitempty"`
 }
 
 // Execute builds a probe plan using the supplied builder and executes it with the engine.
@@ -77,6 +84,14 @@ func Execute(ctx context.Context, opts config.Options, builder PlanBuilder, engi
 		certs := collector.GetCertificates()
 		if len(certs) > 0 {
 			exec.Certs = certs
+		}
+	}
+
+	// If the engine supports client certificate collection, retrieve the client certificates
+	if clientCollector, ok := engine.(ClientCertificateCollector); ok {
+		clientCerts := clientCollector.GetClientCertificates()
+		if len(clientCerts) > 0 {
+			exec.ClientCerts = clientCerts
 		}
 	}
 
