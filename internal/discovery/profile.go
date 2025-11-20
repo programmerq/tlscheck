@@ -261,6 +261,7 @@ func firstNonEmpty(values ...string) string {
 }
 
 // GetClientCertPaths returns the expected paths for client certificate and key files.
+// It returns the Teleport 17+ format paths (preferred).
 // It does not check if the files exist.
 func GetClientCertPaths(home, profileName, username string) (certPath, keyPath string) {
 	if strings.TrimSpace(home) == "" || strings.TrimSpace(profileName) == "" {
@@ -272,17 +273,39 @@ func GetClientCertPaths(home, profileName, username string) (certPath, keyPath s
 		username = profileName
 	}
 
-	// tsh stores user TLS certificates as <username>-x509.pem in the profile directory
-	// and private keys as <username>.key
-	certPath = filepath.Join(home, "keys", profileName, fmt.Sprintf("%s-x509.pem", username))
+	// Teleport 17+ format (preferred)
+	// cert: ~/.tsh/keys/{profile}/{username}.pub
+	// key: ~/.tsh/keys/{profile}/{username}.key
+	certPath = filepath.Join(home, "keys", profileName, fmt.Sprintf("%s.pub", username))
 	keyPath = filepath.Join(home, "keys", profileName, fmt.Sprintf("%s.key", username))
+	return certPath, keyPath
+}
+
+// getLegacyClientCertPaths returns the Teleport 16 and below format paths.
+func getLegacyClientCertPaths(home, profileName, username string) (certPath, keyPath string) {
+	if strings.TrimSpace(home) == "" || strings.TrimSpace(profileName) == "" {
+		return "", ""
+	}
+
+	// If username is not provided, fall back to using profileName for backwards compatibility
+	if strings.TrimSpace(username) == "" {
+		username = profileName
+	}
+
+	// Teleport 16 and below format (legacy)
+	// cert: ~/.tsh/keys/{profile}/{username}-x509.pem
+	// key: ~/.tsh/keys/{profile}/{username}
+	certPath = filepath.Join(home, "keys", profileName, fmt.Sprintf("%s-x509.pem", username))
+	keyPath = filepath.Join(home, "keys", profileName, username)
 	return certPath, keyPath
 }
 
 // LoadClientCert attempts to load the TLS client certificate and key from the profile directory.
 // Returns nil if the certificate files don't exist or can't be read.
 // The username parameter should come from the profile's user field, and profileName is used for the directory path.
+// It tries Teleport 17+ format first, then falls back to Teleport 16 and below format.
 func LoadClientCert(home, profileName, username string) *ClientCert {
+	// Try Teleport 17+ format first
 	certPath, keyPath := GetClientCertPaths(home, profileName, username)
 	if certPath == "" || keyPath == "" {
 		return nil
@@ -291,8 +314,18 @@ func LoadClientCert(home, profileName, username string) *ClientCert {
 	certPEM, certErr := os.ReadFile(certPath)
 	keyPEM, keyErr := os.ReadFile(keyPath)
 
+	// If modern format doesn't exist, try legacy format
 	if certErr != nil || keyErr != nil {
-		return nil
+		certPath, keyPath = getLegacyClientCertPaths(home, profileName, username)
+		if certPath == "" || keyPath == "" {
+			return nil
+		}
+		certPEM, certErr = os.ReadFile(certPath)
+		keyPEM, keyErr = os.ReadFile(keyPath)
+
+		if certErr != nil || keyErr != nil {
+			return nil
+		}
 	}
 
 	if len(certPEM) == 0 || len(keyPEM) == 0 {

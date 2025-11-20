@@ -142,7 +142,8 @@ func TestLoadClientCert(t *testing.T) {
 			t.Fatalf("failed to generate test certificate: %v", err)
 		}
 
-		certPath := filepath.Join(keysDir, username+"-x509.pem")
+		// Use Teleport 17+ format
+		certPath := filepath.Join(keysDir, username+".pub")
 		keyPath := filepath.Join(keysDir, username+".key")
 
 		if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
@@ -268,8 +269,8 @@ func TestLoadClientCert(t *testing.T) {
 			t.Fatalf("failed to generate test certificate: %v", err)
 		}
 
-		// Use profile name for files when username is empty
-		certPath := filepath.Join(keysDir, profileName+"-x509.pem")
+		// Use Teleport 17+ format with profile name for files when username is empty
+		certPath := filepath.Join(keysDir, profileName+".pub")
 		keyPath := filepath.Join(keysDir, profileName+".key")
 
 		if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
@@ -287,6 +288,54 @@ func TestLoadClientCert(t *testing.T) {
 
 		if string(clientCert.CertPEM) != string(certPEM) {
 			t.Errorf("CertPEM mismatch when falling back to profile name")
+		}
+	})
+
+	t.Run("falls back to legacy format (Teleport 16 and below)", func(t *testing.T) {
+		dir := t.TempDir()
+		profileName := "legacy.example.com"
+		username := "legacyuser"
+
+		// Create keys directory structure
+		keysDir := filepath.Join(dir, "keys", profileName)
+		if err := os.MkdirAll(keysDir, 0o700); err != nil {
+			t.Fatalf("failed to create keys directory: %v", err)
+		}
+
+		// Generate a test certificate
+		certPEM, keyPEM, err := GenerateTestCertificate()
+		if err != nil {
+			t.Fatalf("failed to generate test certificate: %v", err)
+		}
+
+		// Use legacy Teleport 16 format
+		certPath := filepath.Join(keysDir, username+"-x509.pem")
+		keyPath := filepath.Join(keysDir, username)
+
+		if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
+			t.Fatalf("failed to write cert: %v", err)
+		}
+		if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+			t.Fatalf("failed to write key: %v", err)
+		}
+
+		// Load client cert - should find legacy format
+		clientCert := LoadClientCert(dir, profileName, username)
+		if clientCert == nil {
+			t.Fatal("LoadClientCert should find legacy format when new format doesn't exist")
+		}
+
+		if string(clientCert.CertPEM) != string(certPEM) {
+			t.Errorf("CertPEM mismatch when using legacy format")
+		}
+		if string(clientCert.KeyPEM) != string(keyPEM) {
+			t.Errorf("KeyPEM mismatch when using legacy format")
+		}
+		if clientCert.CertPath != certPath {
+			t.Errorf("CertPath = %q, want %q", clientCert.CertPath, certPath)
+		}
+		if clientCert.KeyPath != keyPath {
+			t.Errorf("KeyPath = %q, want %q", clientCert.KeyPath, keyPath)
 		}
 	})
 }

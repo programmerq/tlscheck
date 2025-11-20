@@ -218,7 +218,8 @@ cluster: root.example.com
 		t.Fatalf("generate test certificate: %v", err)
 	}
 
-	certPath := filepath.Join(keysDir, profileName+"-x509.pem")
+	// Use Teleport 17+ format
+	certPath := filepath.Join(keysDir, profileName+".pub")
 	keyPath := filepath.Join(keysDir, profileName+".key")
 	if err := os.WriteFile(certPath, testCertPEM, 0o600); err != nil {
 		t.Fatalf("write cert: %v", err)
