@@ -19,6 +19,7 @@ import (
 // Profile describes a Teleport profile entry discovered on disk.
 type Profile struct {
 	Name         string
+	Username     string
 	PublicAddr   string
 	ClusterName  string
 	Path         string
@@ -125,6 +126,7 @@ func loadProfileFile(home, name string) (Profile, error) {
 
 	profile := Profile{
 		Name:         name,
+		Username:     strings.TrimSpace(parsed.User),
 		PublicAddr:   publicAddr,
 		ClusterName:  strings.TrimSpace(firstNonEmpty(parsed.Cluster, name)),
 		Path:         path,
@@ -196,6 +198,7 @@ type tshProfile struct {
 	SSHProxyAddr string `yaml:"ssh_proxy_addr"`
 	PublicAddr   string `yaml:"public_addr"`
 	Cluster      string `yaml:"cluster"`
+	User         string `yaml:"user"`
 }
 
 type profilesFile struct {
@@ -257,16 +260,32 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-// LoadClientCert attempts to load the TLS client certificate and key from the profile directory.
-// Returns nil if the certificate files don't exist or can't be read.
-func LoadClientCert(home, profileName string) *ClientCert {
+// GetClientCertPaths returns the expected paths for client certificate and key files.
+// It does not check if the files exist.
+func GetClientCertPaths(home, profileName, username string) (certPath, keyPath string) {
 	if strings.TrimSpace(home) == "" || strings.TrimSpace(profileName) == "" {
-		return nil
+		return "", ""
 	}
 
-	// tsh stores user TLS certificates as <profile>-x509.pem in the profile directory
-	certPath := filepath.Join(home, "keys", profileName, fmt.Sprintf("%s-x509.pem", profileName))
-	keyPath := filepath.Join(home, "keys", profileName, profileName)
+	// If username is not provided, fall back to using profileName for backwards compatibility
+	if strings.TrimSpace(username) == "" {
+		username = profileName
+	}
+
+	// tsh stores user TLS certificates as <username>-x509.pem in the profile directory
+	certPath = filepath.Join(home, "keys", profileName, fmt.Sprintf("%s-x509.pem", username))
+	keyPath = filepath.Join(home, "keys", profileName, username)
+	return certPath, keyPath
+}
+
+// LoadClientCert attempts to load the TLS client certificate and key from the profile directory.
+// Returns nil if the certificate files don't exist or can't be read.
+// The username parameter should come from the profile's user field, and profileName is used for the directory path.
+func LoadClientCert(home, profileName, username string) *ClientCert {
+	certPath, keyPath := GetClientCertPaths(home, profileName, username)
+	if certPath == "" || keyPath == "" {
+		return nil
+	}
 
 	certPEM, certErr := os.ReadFile(certPath)
 	keyPEM, keyErr := os.ReadFile(keyPath)

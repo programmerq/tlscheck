@@ -128,6 +128,7 @@ func TestLoadClientCert(t *testing.T) {
 	t.Run("loads valid cert and key", func(t *testing.T) {
 		dir := t.TempDir()
 		profileName := "test.example.com"
+		username := "testuser"
 
 		// Create keys directory structure
 		keysDir := filepath.Join(dir, "keys", profileName)
@@ -141,8 +142,8 @@ func TestLoadClientCert(t *testing.T) {
 			t.Fatalf("failed to generate test certificate: %v", err)
 		}
 
-		certPath := filepath.Join(keysDir, profileName+"-x509.pem")
-		keyPath := filepath.Join(keysDir, profileName)
+		certPath := filepath.Join(keysDir, username+"-x509.pem")
+		keyPath := filepath.Join(keysDir, username)
 
 		if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
 			t.Fatalf("failed to write cert: %v", err)
@@ -152,7 +153,7 @@ func TestLoadClientCert(t *testing.T) {
 		}
 
 		// Load client cert
-		clientCert := LoadClientCert(dir, profileName)
+		clientCert := LoadClientCert(dir, profileName, username)
 		if clientCert == nil {
 			t.Fatal("LoadClientCert returned nil, expected valid cert")
 		}
@@ -230,14 +231,14 @@ func TestLoadClientCert(t *testing.T) {
 		dir := t.TempDir()
 		profileName := "missing.example.com"
 
-		clientCert := LoadClientCert(dir, profileName)
+		clientCert := LoadClientCert(dir, profileName, "testuser")
 		if clientCert != nil {
 			t.Error("LoadClientCert should return nil when cert file is missing")
 		}
 	})
 
 	t.Run("returns nil with empty home", func(t *testing.T) {
-		clientCert := LoadClientCert("", "test.example.com")
+		clientCert := LoadClientCert("", "test.example.com", "testuser")
 		if clientCert != nil {
 			t.Error("LoadClientCert should return nil with empty home")
 		}
@@ -245,9 +246,47 @@ func TestLoadClientCert(t *testing.T) {
 
 	t.Run("returns nil with empty profile name", func(t *testing.T) {
 		dir := t.TempDir()
-		clientCert := LoadClientCert(dir, "")
+		clientCert := LoadClientCert(dir, "", "testuser")
 		if clientCert != nil {
 			t.Error("LoadClientCert should return nil with empty profile name")
+		}
+	})
+
+	t.Run("falls back to profile name when username is empty", func(t *testing.T) {
+		dir := t.TempDir()
+		profileName := "fallback.example.com"
+
+		// Create keys directory structure
+		keysDir := filepath.Join(dir, "keys", profileName)
+		if err := os.MkdirAll(keysDir, 0o700); err != nil {
+			t.Fatalf("failed to create keys directory: %v", err)
+		}
+
+		// Generate a test certificate
+		certPEM, keyPEM, err := GenerateTestCertificate()
+		if err != nil {
+			t.Fatalf("failed to generate test certificate: %v", err)
+		}
+
+		// Use profile name for files when username is empty
+		certPath := filepath.Join(keysDir, profileName+"-x509.pem")
+		keyPath := filepath.Join(keysDir, profileName)
+
+		if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
+			t.Fatalf("failed to write cert: %v", err)
+		}
+		if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+			t.Fatalf("failed to write key: %v", err)
+		}
+
+		// Load client cert with empty username - should fall back to profile name
+		clientCert := LoadClientCert(dir, profileName, "")
+		if clientCert == nil {
+			t.Fatal("LoadClientCert should fall back to profile name when username is empty")
+		}
+
+		if string(clientCert.CertPEM) != string(certPEM) {
+			t.Errorf("CertPEM mismatch when falling back to profile name")
 		}
 	})
 }

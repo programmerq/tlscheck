@@ -35,8 +35,12 @@ type ProxySettings struct {
 
 // ProfileInfo records the Teleport profile location used for automatic defaults.
 type ProfileInfo struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
+	Name            string `json:"name"`
+	Path            string `json:"path"`
+	Username        string `json:"username,omitempty"`
+	ClientCertPath  string `json:"client_cert_path,omitempty"`
+	ClientKeyPath   string `json:"client_key_path,omitempty"`
+	ClientCertFound bool   `json:"client_cert_found"`
 }
 
 // ClientCertInfo contains metadata about the client certificate used for mutual TLS.

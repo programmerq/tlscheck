@@ -25,10 +25,23 @@ func ResolveRuntime(ctx context.Context, opts Options) (Options, error) {
 		if resolved.PublicAddr == "" {
 			resolved.PublicAddr = profile.PublicAddr
 		}
-		resolved.ProfileSource = &ProfileInfo{Name: profile.Name, Path: profile.Path}
+
+		// Calculate expected client cert paths
+		certPath, keyPath := discovery.GetClientCertPaths(home, profile.Name, profile.Username)
+
+		// Initialize ProfileInfo with all available information
+		resolved.ProfileSource = &ProfileInfo{
+			Name:            profile.Name,
+			Path:            profile.Path,
+			Username:        profile.Username,
+			ClientCertPath:  certPath,
+			ClientKeyPath:   keyPath,
+			ClientCertFound: false, // Will be set to true if cert is successfully loaded
+		}
 
 		// Try to load the client certificate for this profile
-		if clientCert := discovery.LoadClientCert(home, profile.Name); clientCert != nil {
+		if clientCert := discovery.LoadClientCert(home, profile.Name, profile.Username); clientCert != nil {
+			resolved.ProfileSource.ClientCertFound = true
 			resolved.ClientCertPEM = clientCert.CertPEM
 			resolved.ClientKeyPEM = clientCert.KeyPEM
 
