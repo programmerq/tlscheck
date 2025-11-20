@@ -143,7 +143,7 @@ func TestLoadClientCert(t *testing.T) {
 		}
 
 		certPath := filepath.Join(keysDir, username+"-x509.pem")
-		keyPath := filepath.Join(keysDir, username)
+		keyPath := filepath.Join(keysDir, username+".key")
 
 		if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
 			t.Fatalf("failed to write cert: %v", err)
@@ -270,7 +270,7 @@ func TestLoadClientCert(t *testing.T) {
 
 		// Use profile name for files when username is empty
 		certPath := filepath.Join(keysDir, profileName+"-x509.pem")
-		keyPath := filepath.Join(keysDir, profileName)
+		keyPath := filepath.Join(keysDir, profileName+".key")
 
 		if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
 			t.Fatalf("failed to write cert: %v", err)

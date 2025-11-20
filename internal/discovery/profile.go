@@ -273,8 +273,9 @@ func GetClientCertPaths(home, profileName, username string) (certPath, keyPath s
 	}
 
 	// tsh stores user TLS certificates as <username>-x509.pem in the profile directory
+	// and private keys as <username>.key
 	certPath = filepath.Join(home, "keys", profileName, fmt.Sprintf("%s-x509.pem", username))
-	keyPath = filepath.Join(home, "keys", profileName, username)
+	keyPath = filepath.Join(home, "keys", profileName, fmt.Sprintf("%s.key", username))
 	return certPath, keyPath
 }
 

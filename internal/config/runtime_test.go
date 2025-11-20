@@ -219,7 +219,7 @@ cluster: root.example.com
 	}
 
 	certPath := filepath.Join(keysDir, profileName+"-x509.pem")
-	keyPath := filepath.Join(keysDir, profileName)
+	keyPath := filepath.Join(keysDir, profileName+".key")
 	if err := os.WriteFile(certPath, testCertPEM, 0o600); err != nil {
 		t.Fatalf("write cert: %v", err)
 	}
