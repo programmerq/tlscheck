@@ -80,6 +80,8 @@ func Build(opts config.Options) (Plan, error) {
 		DefaultUpgradePath: seq,
 	}
 
+	hasClientCert := opts.ClientCert != nil
+
 	for _, tmpl := range serviceTemplates {
 		if filtering {
 			if _, ok := tmplFilter[tmpl.Key]; !ok {
@@ -88,7 +90,7 @@ func Build(opts config.Options) (Plan, error) {
 			delete(tmplFilter, tmpl.Key)
 		}
 
-		targets := tmpl.instantiate(opts, base16Name, seq)
+		targets := tmpl.instantiate(opts, base16Name, seq, hasClientCert)
 		plan.Targets = append(plan.Targets, targets...)
 	}
 
@@ -139,7 +141,7 @@ type serviceTemplate struct {
 	UseClientCert bool
 }
 
-func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq []UpgradeAttempt) []ProbeTarget {
+func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq []UpgradeAttempt, hasClientCert bool) []ProbeTarget {
 	alpns := t.ALPNs(opts, base16Name)
 	primarySNI, additionalSNIs := t.SNIs(opts, base16Name)
 
@@ -148,13 +150,25 @@ func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq
 		return nil
 	}
 
-	targets := make([]ProbeTarget, 0, len(ports))
 	trust := t.Trust
 	if trust == "" {
 		trust = TrustSystemRoots
 	}
+
+	// If this service supports client certs and we have one, generate both with and without
+	needsDualTargets := t.UseClientCert && hasClientCert
+
+	var targets []ProbeTarget
+	if needsDualTargets {
+		// Double capacity for both with and without client cert
+		targets = make([]ProbeTarget, 0, len(ports)*2)
+	} else {
+		targets = make([]ProbeTarget, 0, len(ports))
+	}
+
 	for _, port := range ports {
-		target := ProbeTarget{
+		// Create base target configuration
+		baseTarget := ProbeTarget{
 			ServiceKey:     t.Key,
 			DisplayName:    t.DisplayName,
 			Address:        opts.PublicAddr,
@@ -166,19 +180,35 @@ func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq
 			Trust:          trust,
 			Repeat:         opts.Repeat,
 			Notes:          cloneSlice(t.Notes),
-			UseClientCert:  t.UseClientCert,
 		}
 
 		if t.NeedsUpgrade {
-			target.UpgradeSequence = cloneUpgrades(seq)
+			baseTarget.UpgradeSequence = cloneUpgrades(seq)
 		}
 
 		if t.Informational != nil && t.Informational(opts) {
-			target.InformationalOnly = true
-			target.Notes = append(target.Notes, "TLS routing disabled; treating probe outcome as informational only.")
+			baseTarget.InformationalOnly = true
+			baseTarget.Notes = append(baseTarget.Notes, "TLS routing disabled; treating probe outcome as informational only.")
 		}
 
-		targets = append(targets, target)
+		if needsDualTargets {
+			// First, add target WITH client cert
+			withCert := baseTarget
+			withCert.UseClientCert = true
+			withCert.Notes = append(cloneSlice(withCert.Notes), "Using client certificate for mutual TLS")
+			targets = append(targets, withCert)
+
+			// Then, add target WITHOUT client cert
+			withoutCert := baseTarget
+			withoutCert.UseClientCert = false
+			withoutCert.Notes = append(cloneSlice(withoutCert.Notes), "No client certificate (server-only TLS)")
+			targets = append(targets, withoutCert)
+		} else {
+			// Only add one target
+			// Use client cert only if template says so AND we have one
+			baseTarget.UseClientCert = t.UseClientCert && hasClientCert
+			targets = append(targets, baseTarget)
+		}
 	}
 
 	// Some services implicitly need to record the base16 cluster hint.

@@ -404,45 +404,88 @@ func TestBuildWithoutIPAddresses(t *testing.T) {
 func TestBuildMarksClientCertServices(t *testing.T) {
 	t.Parallel()
 
-	opts := config.Options{
-		PublicAddr:        "cluster.example.com",
-		ClusterName:       "example",
-		TeleportVersion:   "v17.3.2",
-		Repeat:            1,
-		WebProxyPort:      443,
-		TLSRoutingEnabled: true,
-	}
-
-	plan, err := Build(opts)
-	if err != nil {
-		t.Fatalf("Build returned error: %v", err)
-	}
-
-	// Services that should use client certs
-	shouldUseClientCert := map[string]bool{
-		"proxy_ssh_grpc": true,
-		"auth_via_proxy": true,
-	}
-
-	// Services that should NOT use client certs
-	shouldNotUseClientCert := map[string]bool{
-		"proxy_web":      true,
-		"reverse_tunnel": true,
-		"proxy_ssh":      true,
-	}
-
-	for _, target := range plan.Targets {
-		if shouldUseClientCert[target.ServiceKey] {
-			if !target.UseClientCert {
-				t.Errorf("service %s should have UseClientCert=true but got false", target.ServiceKey)
-			}
+	t.Run("without client cert", func(t *testing.T) {
+		opts := config.Options{
+			PublicAddr:        "cluster.example.com",
+			ClusterName:       "example",
+			TeleportVersion:   "v17.3.2",
+			Repeat:            1,
+			WebProxyPort:      443,
+			TLSRoutingEnabled: true,
+			// No ClientCert set
 		}
-		if shouldNotUseClientCert[target.ServiceKey] {
+
+		plan, err := Build(opts)
+		if err != nil {
+			t.Fatalf("Build returned error: %v", err)
+		}
+
+		// When no client cert exists, services should NOT set UseClientCert=true
+		for _, target := range plan.Targets {
 			if target.UseClientCert {
-				t.Errorf("service %s should have UseClientCert=false but got true", target.ServiceKey)
+				t.Errorf("service %s should have UseClientCert=false when no cert available, but got true", target.ServiceKey)
 			}
 		}
-	}
+	})
+
+	t.Run("with client cert", func(t *testing.T) {
+		opts := config.Options{
+			PublicAddr:        "cluster.example.com",
+			ClusterName:       "example",
+			TeleportVersion:   "v17.3.2",
+			Repeat:            1,
+			WebProxyPort:      443,
+			TLSRoutingEnabled: true,
+			ClientCert: &config.ClientCertInfo{
+				Fingerprint: "test-fingerprint",
+			},
+		}
+
+		plan, err := Build(opts)
+		if err != nil {
+			t.Fatalf("Build returned error: %v", err)
+		}
+
+		// Services that support client certs should generate both with and without
+		clientCertServices := map[string]bool{
+			"proxy_ssh_grpc": true,
+			"auth_via_proxy": true,
+		}
+
+		// Count targets for services that support client certs
+		serviceCounts := make(map[string]int)
+		withCertCount := make(map[string]int)
+		withoutCertCount := make(map[string]int)
+
+		for _, target := range plan.Targets {
+			if clientCertServices[target.ServiceKey] {
+				serviceCounts[target.ServiceKey]++
+				if target.UseClientCert {
+					withCertCount[target.ServiceKey]++
+				} else {
+					withoutCertCount[target.ServiceKey]++
+				}
+			} else {
+				// Other services should NOT use client cert
+				if target.UseClientCert {
+					t.Errorf("service %s should not use client cert but got UseClientCert=true", target.ServiceKey)
+				}
+			}
+		}
+
+		// Each client-cert-supporting service should have 2 targets: one with, one without
+		for service := range clientCertServices {
+			if serviceCounts[service] != 2 {
+				t.Errorf("service %s should have 2 targets (with and without cert) but got %d", service, serviceCounts[service])
+			}
+			if withCertCount[service] != 1 {
+				t.Errorf("service %s should have 1 target with client cert but got %d", service, withCertCount[service])
+			}
+			if withoutCertCount[service] != 1 {
+				t.Errorf("service %s should have 1 target without client cert but got %d", service, withoutCertCount[service])
+			}
+		}
+	})
 }
 
 func TestBuildDuplicatesTargetsWhenProxyConfigured(t *testing.T) {
