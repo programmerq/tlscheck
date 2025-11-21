@@ -168,7 +168,7 @@ func (e *Engine) Run(ctx context.Context, p plan.Plan) ([]Result, error) {
 			// No override IPs, use DNS-resolved IPs from the plan
 			ips = target.DNSResolvedIPs
 			if len(ips) == 0 {
-				// If DNS resolution wasn't done in plan, use the address as-is (might be an IP already)
+				// No DNS IPs (e.g., if address is already an IP or DNS failed), use the address as-is
 				ips = []string{target.Address}
 			}
 		}
