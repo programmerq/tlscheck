@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -492,9 +493,6 @@ func (c *byteCountingConn) BytesWritten() int64 {
 
 // sortResults sorts results by service_key (grouped together), then by address, then by attempt.
 func sortResults(results []Result) {
-	// We need a stable sort that groups by service_key first, then by address, then by attempt
-	// We'll use a simple bubble-like approach with comparisons
-
 	// Create a map to track the order of service keys as they appear
 	serviceOrder := make(map[string]int)
 	orderIndex := 0
@@ -505,47 +503,22 @@ func sortResults(results []Result) {
 		}
 	}
 
-	// Now sort using a comparison function
-	for i := 0; i < len(results); i++ {
-		for j := i + 1; j < len(results); j++ {
-			if compareResults(results[i], results[j], serviceOrder) > 0 {
-				results[i], results[j] = results[j], results[i]
-			}
+	// Sort using the built-in sort.Slice for O(n log n) performance
+	sort.Slice(results, func(i, j int) bool {
+		a, b := results[i], results[j]
+
+		// First compare by service_key order (as they appear in the original list)
+		aOrder, bOrder := serviceOrder[a.Target.ServiceKey], serviceOrder[b.Target.ServiceKey]
+		if aOrder != bOrder {
+			return aOrder < bOrder
 		}
-	}
-}
 
-// compareResults returns:
-// -1 if a should come before b
-//
-//	0 if a and b are equal
-//
-// +1 if a should come after b
-func compareResults(a, b Result, serviceOrder map[string]int) int {
-	// First compare by service_key order (as they appear in the original list)
-	aOrder, bOrder := serviceOrder[a.Target.ServiceKey], serviceOrder[b.Target.ServiceKey]
-	if aOrder < bOrder {
-		return -1
-	}
-	if aOrder > bOrder {
-		return 1
-	}
+		// Service keys are the same, compare by address
+		if a.Target.Address != b.Target.Address {
+			return a.Target.Address < b.Target.Address
+		}
 
-	// Service keys are the same, compare by address
-	if a.Target.Address < b.Target.Address {
-		return -1
-	}
-	if a.Target.Address > b.Target.Address {
-		return 1
-	}
-
-	// Addresses are the same, compare by attempt
-	if a.Attempt < b.Attempt {
-		return -1
-	}
-	if a.Attempt > b.Attempt {
-		return 1
-	}
-
-	return 0
+		// Addresses are the same, compare by attempt
+		return a.Attempt < b.Attempt
+	})
 }
