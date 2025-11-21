@@ -193,27 +193,13 @@ func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq
 
 		if needsDualTargets {
 			// First, add target WITH client cert
-			// Deep copy all slice fields to avoid shared references
-			withCert := baseTarget
-			withCert.DNSResolvedIPs = cloneSlice(baseTarget.DNSResolvedIPs)
-			withCert.OverrideIPs = cloneSlice(baseTarget.OverrideIPs)
-			withCert.AdditionalSNIs = cloneSlice(baseTarget.AdditionalSNIs)
-			withCert.ALPNs = cloneSlice(baseTarget.ALPNs)
-			withCert.UpgradeSequence = cloneUpgrades(baseTarget.UpgradeSequence)
-			withCert.Notes = cloneSlice(baseTarget.Notes)
+			withCert := deepCopyProbeTarget(baseTarget)
 			withCert.UseClientCert = true
 			withCert.Notes = append(withCert.Notes, "Using client certificate for mutual TLS")
 			targets = append(targets, withCert)
 
 			// Then, add target WITHOUT client cert
-			// Deep copy all slice fields to avoid shared references
-			withoutCert := baseTarget
-			withoutCert.DNSResolvedIPs = cloneSlice(baseTarget.DNSResolvedIPs)
-			withoutCert.OverrideIPs = cloneSlice(baseTarget.OverrideIPs)
-			withoutCert.AdditionalSNIs = cloneSlice(baseTarget.AdditionalSNIs)
-			withoutCert.ALPNs = cloneSlice(baseTarget.ALPNs)
-			withoutCert.UpgradeSequence = cloneUpgrades(baseTarget.UpgradeSequence)
-			withoutCert.Notes = cloneSlice(baseTarget.Notes)
+			withoutCert := deepCopyProbeTarget(baseTarget)
 			withoutCert.UseClientCert = false
 			withoutCert.Notes = append(withoutCert.Notes, "No client certificate (server-only TLS)")
 			targets = append(targets, withoutCert)
@@ -250,6 +236,18 @@ func cloneUpgrades(input []UpgradeAttempt) []UpgradeAttempt {
 	out := make([]UpgradeAttempt, len(input))
 	copy(out, input)
 	return out
+}
+
+// deepCopyProbeTarget creates a deep copy of a ProbeTarget, cloning all slice fields.
+func deepCopyProbeTarget(src ProbeTarget) ProbeTarget {
+	dst := src
+	dst.DNSResolvedIPs = cloneSlice(src.DNSResolvedIPs)
+	dst.OverrideIPs = cloneSlice(src.OverrideIPs)
+	dst.AdditionalSNIs = cloneSlice(src.AdditionalSNIs)
+	dst.ALPNs = cloneSlice(src.ALPNs)
+	dst.UpgradeSequence = cloneUpgrades(src.UpgradeSequence)
+	dst.Notes = cloneSlice(src.Notes)
+	return dst
 }
 
 var serviceTemplates = []serviceTemplate{
