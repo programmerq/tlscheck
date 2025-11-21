@@ -420,10 +420,10 @@ func TestBuildMarksClientCertServices(t *testing.T) {
 			t.Fatalf("Build returned error: %v", err)
 		}
 
-		// When no client cert exists, services should NOT set UseClientCert=true
+		// When no client cert exists, services should NOT set UseClientCert (should be nil)
 		for _, target := range plan.Targets {
-			if target.UseClientCert {
-				t.Errorf("service %s should have UseClientCert=false when no cert available, but got true", target.ServiceKey)
+			if target.UseClientCert != nil {
+				t.Errorf("service %s should have UseClientCert=nil when no cert available, but got %v", target.ServiceKey, *target.UseClientCert)
 			}
 		}
 	})
@@ -460,14 +460,14 @@ func TestBuildMarksClientCertServices(t *testing.T) {
 		for _, target := range plan.Targets {
 			if clientCertServices[target.ServiceKey] {
 				serviceCounts[target.ServiceKey]++
-				if target.UseClientCert {
+				if target.UseClientCert != nil && *target.UseClientCert {
 					withCertCount[target.ServiceKey]++
-				} else {
+				} else if target.UseClientCert != nil && !*target.UseClientCert {
 					withoutCertCount[target.ServiceKey]++
 				}
 			} else {
-				// Other services should NOT use client cert
-				if target.UseClientCert {
+				// Other services should NOT use client cert (should be nil or false)
+				if target.UseClientCert != nil && *target.UseClientCert {
 					t.Errorf("service %s should not use client cert but got UseClientCert=true", target.ServiceKey)
 				}
 			}

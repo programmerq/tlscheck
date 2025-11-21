@@ -35,7 +35,7 @@ type ProbeTarget struct {
 	InformationalOnly bool             `json:"informational_only,omitempty"`
 	Repeat            int              `json:"repeat"`
 	Notes             []string         `json:"notes,omitempty"`
-	UseClientCert     bool             `json:"use_client_cert,omitempty"`
+	UseClientCert     *bool            `json:"use_client_cert,omitempty"`
 	UseProxy          bool             `json:"use_proxy,omitempty"`
 	ProxyURL          string           `json:"proxy_url,omitempty"`
 }
@@ -194,19 +194,26 @@ func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq
 		if needsDualTargets {
 			// First, add target WITH client cert
 			withCert := deepCopyProbeTarget(baseTarget)
-			withCert.UseClientCert = true
+			trueVal := true
+			withCert.UseClientCert = &trueVal
 			withCert.Notes = append(withCert.Notes, "Using client certificate for mutual TLS")
 			targets = append(targets, withCert)
 
 			// Then, add target WITHOUT client cert
 			withoutCert := deepCopyProbeTarget(baseTarget)
-			withoutCert.UseClientCert = false
+			falseVal := false
+			withoutCert.UseClientCert = &falseVal
 			withoutCert.Notes = append(withoutCert.Notes, "No client certificate (server-only TLS)")
 			targets = append(targets, withoutCert)
 		} else {
 			// Only add one target
-			// Use client cert only if template says so AND we have one
-			baseTarget.UseClientCert = t.UseClientCert && hasClientCert
+			// If we have a client cert, explicitly set the value (true or false)
+			// If we don't have a client cert, leave it nil (omitted from JSON)
+			if hasClientCert {
+				useClientCert := t.UseClientCert
+				baseTarget.UseClientCert = &useClientCert
+			}
+			// else: UseClientCert remains nil and will be omitted from JSON
 			targets = append(targets, baseTarget)
 		}
 	}

@@ -256,7 +256,7 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 	}
 
 	// If the target requires a client certificate and we have one available, configure it
-	if target.UseClientCert && len(e.ClientCertPEM) > 0 && len(e.ClientKeyPEM) > 0 {
+	if target.UseClientCert != nil && *target.UseClientCert && len(e.ClientCertPEM) > 0 && len(e.ClientKeyPEM) > 0 {
 		cert, err := tls.X509KeyPair(e.ClientCertPEM, e.ClientKeyPEM)
 		if err == nil {
 			tlsCfg.Certificates = []tls.Certificate{cert}

@@ -678,6 +678,7 @@ func TestEngineClientCertificate(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	host, port := splitHostPort(t, addr)
+	trueVal := true
 	target := plan.ProbeTarget{
 		ServiceKey:    "proxy_ssh_grpc",
 		Address:       host,
@@ -686,7 +687,7 @@ func TestEngineClientCertificate(t *testing.T) {
 		ALPNs:         []string{"teleport-proxy-ssh-grpc"},
 		Trust:         plan.TrustSystemRoots,
 		Repeat:        1,
-		UseClientCert: true,
+		UseClientCert: &trueVal,
 	}
 
 	engine := NewEngine()
@@ -778,6 +779,7 @@ func TestEngineClientCertificateNotUsedWhenNotRequired(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	host, port := splitHostPort(t, addr)
+	falseVal := false
 	target := plan.ProbeTarget{
 		ServiceKey:    "proxy_web",
 		Address:       host,
@@ -786,7 +788,7 @@ func TestEngineClientCertificateNotUsedWhenNotRequired(t *testing.T) {
 		ALPNs:         []string{"h2"},
 		Trust:         plan.TrustSystemRoots,
 		Repeat:        1,
-		UseClientCert: false, // This service should NOT use client cert
+		UseClientCert: &falseVal, // This service should NOT use client cert
 	}
 
 	engine := NewEngine()

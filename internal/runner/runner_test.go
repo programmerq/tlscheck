@@ -204,7 +204,8 @@ func TestExecuteClientCertificateCollection(t *testing.T) {
 	t.Parallel()
 
 	opts := config.Options{PublicAddr: "proxy.example.com"}
-	expectedPlan := plan.Plan{Targets: []plan.ProbeTarget{{ServiceKey: "proxy_ssh_grpc", UseClientCert: true}}}
+	trueVal := true
+	expectedPlan := plan.Plan{Targets: []plan.ProbeTarget{{ServiceKey: "proxy_ssh_grpc", UseClientCert: &trueVal}}}
 
 	// Create a result with a client cert fingerprint
 	result := probe.Result{
