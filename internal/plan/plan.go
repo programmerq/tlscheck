@@ -193,15 +193,29 @@ func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq
 
 		if needsDualTargets {
 			// First, add target WITH client cert
+			// Deep copy all slice fields to avoid shared references
 			withCert := baseTarget
+			withCert.DNSResolvedIPs = cloneSlice(baseTarget.DNSResolvedIPs)
+			withCert.OverrideIPs = cloneSlice(baseTarget.OverrideIPs)
+			withCert.AdditionalSNIs = cloneSlice(baseTarget.AdditionalSNIs)
+			withCert.ALPNs = cloneSlice(baseTarget.ALPNs)
+			withCert.UpgradeSequence = cloneUpgrades(baseTarget.UpgradeSequence)
+			withCert.Notes = cloneSlice(baseTarget.Notes)
 			withCert.UseClientCert = true
-			withCert.Notes = append(cloneSlice(withCert.Notes), "Using client certificate for mutual TLS")
+			withCert.Notes = append(withCert.Notes, "Using client certificate for mutual TLS")
 			targets = append(targets, withCert)
 
 			// Then, add target WITHOUT client cert
+			// Deep copy all slice fields to avoid shared references
 			withoutCert := baseTarget
+			withoutCert.DNSResolvedIPs = cloneSlice(baseTarget.DNSResolvedIPs)
+			withoutCert.OverrideIPs = cloneSlice(baseTarget.OverrideIPs)
+			withoutCert.AdditionalSNIs = cloneSlice(baseTarget.AdditionalSNIs)
+			withoutCert.ALPNs = cloneSlice(baseTarget.ALPNs)
+			withoutCert.UpgradeSequence = cloneUpgrades(baseTarget.UpgradeSequence)
+			withoutCert.Notes = cloneSlice(baseTarget.Notes)
 			withoutCert.UseClientCert = false
-			withoutCert.Notes = append(cloneSlice(withoutCert.Notes), "No client certificate (server-only TLS)")
+			withoutCert.Notes = append(withoutCert.Notes, "No client certificate (server-only TLS)")
 			targets = append(targets, withoutCert)
 		} else {
 			// Only add one target
