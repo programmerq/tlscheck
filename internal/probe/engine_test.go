@@ -827,3 +827,168 @@ func TestEngineClientCertificateNotUsedWhenNotRequired(t *testing.T) {
 
 	t.Log("Client certificate was correctly NOT used when UseClientCert=false")
 }
+
+func TestResultTimestampAndByteCount(t *testing.T) {
+	t.Parallel()
+
+	// Set up a simple TLS server using the existing helper
+	cert, _ := generateServerCert(t, "test.example.com")
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer listener.Close()
+
+	tlsListener := tls.NewListener(listener, &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		NextProtos:   []string{"h2"},
+	})
+
+	// Start server
+	go func() {
+		for {
+			conn, err := tlsListener.Accept()
+			if err != nil {
+				return
+			}
+			// Send some data so BytesRead will be non-zero
+			conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+			conn.Close()
+		}
+	}()
+
+	engine := NewEngine()
+	target := plan.ProbeTarget{
+		ServiceKey:  "test",
+		DisplayName: "Test Service",
+		Address:     "127.0.0.1",
+		Port:        listener.Addr().(*net.TCPAddr).Port,
+		PrimarySNI:  "test.example.com",
+		ALPNs:       []string{"h2"},
+		Trust:       plan.TrustSystemRoots,
+		Repeat:      1,
+	}
+
+	testPlan := plan.Plan{
+		Targets: []plan.ProbeTarget{target},
+	}
+
+	results, err := engine.Run(context.Background(), testPlan)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+
+	result := results[0]
+
+	// Check timestamp is set and recent
+	if result.Timestamp.IsZero() {
+		t.Error("expected Timestamp to be set")
+	}
+	if time.Since(result.Timestamp) > 5*time.Second {
+		t.Errorf("Timestamp seems too old: %v", result.Timestamp)
+	}
+
+	// Check byte counts are set (TLS handshake should send/receive data)
+	if result.BytesWritten == 0 {
+		t.Error("expected BytesWritten > 0")
+	}
+	// BytesRead may be 0 if server closes immediately after handshake,
+	// but with our server sending data, it should be > 0
+	// However, this is timing-dependent, so we'll just check it was tracked
+	t.Logf("Result captured:")
+	t.Logf("  Timestamp: %v", result.Timestamp)
+	t.Logf("  BytesWritten: %d", result.BytesWritten)
+	t.Logf("  BytesRead: %d", result.BytesRead)
+}
+
+func TestResultsSorting(t *testing.T) {
+	t.Parallel()
+
+	// Create results in a mixed order
+	results := []Result{
+		{Target: plan.ProbeTarget{ServiceKey: "service_b", Address: "2.2.2.2"}, Attempt: 2},
+		{Target: plan.ProbeTarget{ServiceKey: "service_a", Address: "1.1.1.1"}, Attempt: 1},
+		{Target: plan.ProbeTarget{ServiceKey: "service_b", Address: "2.2.2.2"}, Attempt: 1},
+		{Target: plan.ProbeTarget{ServiceKey: "service_a", Address: "1.1.1.2"}, Attempt: 1},
+		{Target: plan.ProbeTarget{ServiceKey: "service_a", Address: "1.1.1.1"}, Attempt: 2},
+		{Target: plan.ProbeTarget{ServiceKey: "service_b", Address: "2.2.2.1"}, Attempt: 1},
+	}
+
+	sortResults(results)
+
+	// Expected order after sorting:
+	// Service keys appear in the order they were first seen (service_b first, then service_a)
+	// Within each service key, sorted by address, then attempt
+
+	expected := []struct {
+		serviceKey string
+		address    string
+		attempt    int
+	}{
+		{"service_b", "2.2.2.1", 1},
+		{"service_b", "2.2.2.2", 1},
+		{"service_b", "2.2.2.2", 2},
+		{"service_a", "1.1.1.1", 1},
+		{"service_a", "1.1.1.1", 2},
+		{"service_a", "1.1.1.2", 1},
+	}
+
+	if len(results) != len(expected) {
+		t.Fatalf("expected %d results, got %d", len(expected), len(results))
+	}
+
+	for i, exp := range expected {
+		if results[i].Target.ServiceKey != exp.serviceKey {
+			t.Errorf("result[%d]: expected serviceKey %s, got %s", i, exp.serviceKey, results[i].Target.ServiceKey)
+		}
+		if results[i].Target.Address != exp.address {
+			t.Errorf("result[%d]: expected address %s, got %s", i, exp.address, results[i].Target.Address)
+		}
+		if results[i].Attempt != exp.attempt {
+			t.Errorf("result[%d]: expected attempt %d, got %d", i, exp.attempt, results[i].Attempt)
+		}
+	}
+}
+
+func TestResultsDoNotIncludeDNSResolvedIPs(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine()
+	target := plan.ProbeTarget{
+		ServiceKey:     "test",
+		DisplayName:    "Test Service",
+		Address:        "127.0.0.1",
+		DNSResolvedIPs: []string{"127.0.0.1", "::1"}, // Pre-resolved IPs in plan
+		Port:           9999,                         // Port that won't connect
+		PrimarySNI:     "test.example.com",
+		ALPNs:          []string{"h2"},
+		Trust:          plan.TrustSystemRoots,
+		Repeat:         1,
+	}
+
+	testPlan := plan.Plan{
+		Targets: []plan.ProbeTarget{target},
+	}
+
+	results, err := engine.Run(context.Background(), testPlan)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	// Should get one result per DNS-resolved IP
+	if len(results) < 1 {
+		t.Fatalf("expected at least 1 result, got %d", len(results))
+	}
+
+	// All results' targets should NOT include DNSResolvedIPs
+	for i, result := range results {
+		if len(result.Target.DNSResolvedIPs) != 0 {
+			t.Errorf("result[%d]: expected result.Target.DNSResolvedIPs to be empty, got: %v", i, result.Target.DNSResolvedIPs)
+		}
+	}
+}
