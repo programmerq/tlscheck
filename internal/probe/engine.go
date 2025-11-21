@@ -106,9 +106,12 @@ func (e *Engine) GetClientCertificates() map[string]string {
 type Result struct {
 	Target                plan.ProbeTarget `json:"target"`
 	Attempt               int              `json:"attempt"`
+	Timestamp             time.Time        `json:"timestamp"`
 	LocalAddr             string           `json:"local_addr,omitempty"`
 	RemoteAddr            string           `json:"remote_addr,omitempty"`
 	ResolvedIP            string           `json:"resolved_ip,omitempty"`
+	BytesWritten          int64            `json:"bytes_written,omitempty"`
+	BytesRead             int64            `json:"bytes_read,omitempty"`
 	DialDuration          time.Duration    `json:"dial_duration_ms,omitempty"`
 	HandshakeDuration     time.Duration    `json:"handshake_duration_ms,omitempty"`
 	TotalDuration         time.Duration    `json:"total_duration_ms,omitempty"`
@@ -158,36 +161,24 @@ func (e *Engine) Run(ctx context.Context, p plan.Plan) ([]Result, error) {
 
 	results := make([]Result, 0)
 	for _, target := range p.Targets {
-		// Always try to resolve DNS for informational purposes
-		dnsIPs := []string{}
-		resolved, err := net.LookupIP(target.Address)
-		if err == nil && len(resolved) > 0 {
-			for _, ip := range resolved {
-				dnsIPs = append(dnsIPs, ip.String())
-			}
-		}
-
-		// Update the target with DNS-resolved IPs
-		target.DNSResolvedIPs = dnsIPs
-
 		// Determine which IPs to probe
 		ips := target.OverrideIPs
 		if len(ips) == 0 {
-			// No override IPs, use DNS-resolved IPs
-			ips = dnsIPs
+			// No override IPs, use DNS-resolved IPs from the plan
+			ips = target.DNSResolvedIPs
 			if len(ips) == 0 {
-				// If DNS resolution failed, use the address as-is (might be an IP already)
+				// If DNS resolution wasn't done in plan, use the address as-is (might be an IP already)
 				ips = []string{target.Address}
 			}
 		}
 
 		// Probe each IP
 		for _, ip := range ips {
+			// Create a copy of the target for this specific IP
+			// Remove DNSResolvedIPs from the copy to avoid duplication in results
 			ipTarget := target
+			ipTarget.DNSResolvedIPs = nil
 			ipTarget.Address = ip
-			if len(ips) > 1 {
-				ipTarget.Notes = append(cloneSlice(ipTarget.Notes), fmt.Sprintf("probing %s", ip))
-			}
 
 			repeat := ipTarget.Repeat
 			if repeat <= 0 {
@@ -199,6 +190,10 @@ func (e *Engine) Run(ctx context.Context, p plan.Plan) ([]Result, error) {
 			}
 		}
 	}
+
+	// Sort results: group by service_key, then by address, then by attempt
+	sortResults(results)
+
 	return results, nil
 }
 
@@ -213,7 +208,11 @@ func cloneSlice(input []string) []string {
 
 func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt int) Result {
 	startTime := time.Now()
-	res := Result{Target: target, Attempt: attempt}
+	res := Result{
+		Target:    target,
+		Attempt:   attempt,
+		Timestamp: startTime.UTC(),
+	}
 
 	dialCtx, cancel := context.WithTimeout(ctx, e.Timeout)
 	defer cancel()
@@ -267,13 +266,17 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 		}
 	}
 
-	tlsConn := tls.Client(conn, tlsCfg)
+	// Wrap the connection to track bytes
+	trackedConn := &byteCountingConn{Conn: conn}
+	tlsConn := tls.Client(trackedConn, tlsCfg)
 	defer tlsConn.Close()
 
 	handshakeStart := time.Now()
 	if err := tlsConn.HandshakeContext(dialCtx); err != nil {
 		res.HandshakeDuration = time.Since(handshakeStart)
 		res.TotalDuration = time.Since(startTime)
+		res.BytesWritten = trackedConn.BytesWritten()
+		res.BytesRead = trackedConn.BytesRead()
 		state := tlsConn.ConnectionState()
 		e.captureCertificateDetails(&res, state)
 		e.captureTLSDetails(&res, state)
@@ -295,11 +298,15 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 	if len(target.ALPNs) > 0 {
 		if state.NegotiatedProtocol == "" {
 			res.TotalDuration = time.Since(startTime)
+			res.BytesWritten = trackedConn.BytesWritten()
+			res.BytesRead = trackedConn.BytesRead()
 			res.Failure = &Failure{Kind: "alpn_mismatch", Message: "server did not negotiate ALPN"}
 			return res
 		}
 		if !contains(target.ALPNs, state.NegotiatedProtocol) {
 			res.TotalDuration = time.Since(startTime)
+			res.BytesWritten = trackedConn.BytesWritten()
+			res.BytesRead = trackedConn.BytesRead()
 			res.Failure = &Failure{Kind: "alpn_mismatch", Message: fmt.Sprintf("negotiated %s", state.NegotiatedProtocol)}
 			return res
 		}
@@ -311,11 +318,15 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 			kind = "host_ca_unavailable"
 		}
 		res.TotalDuration = time.Since(startTime)
+		res.BytesWritten = trackedConn.BytesWritten()
+		res.BytesRead = trackedConn.BytesRead()
 		res.Failure = &Failure{Kind: kind, Message: err.Error()}
 		return res
 	}
 
 	res.TotalDuration = time.Since(startTime)
+	res.BytesWritten = trackedConn.BytesWritten()
+	res.BytesRead = trackedConn.BytesRead()
 	return res
 }
 
@@ -441,4 +452,100 @@ func tlsVersionString(version uint16) string {
 	default:
 		return fmt.Sprintf("0x%04X", version)
 	}
+}
+
+// byteCountingConn wraps a net.Conn to track bytes read and written.
+type byteCountingConn struct {
+	net.Conn
+	bytesRead    int64
+	bytesWritten int64
+	mu           sync.Mutex
+}
+
+func (c *byteCountingConn) Read(b []byte) (n int, err error) {
+	n, err = c.Conn.Read(b)
+	c.mu.Lock()
+	c.bytesRead += int64(n)
+	c.mu.Unlock()
+	return n, err
+}
+
+func (c *byteCountingConn) Write(b []byte) (n int, err error) {
+	n, err = c.Conn.Write(b)
+	c.mu.Lock()
+	c.bytesWritten += int64(n)
+	c.mu.Unlock()
+	return n, err
+}
+
+func (c *byteCountingConn) BytesRead() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.bytesRead
+}
+
+func (c *byteCountingConn) BytesWritten() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.bytesWritten
+}
+
+// sortResults sorts results by service_key (grouped together), then by address, then by attempt.
+func sortResults(results []Result) {
+	// We need a stable sort that groups by service_key first, then by address, then by attempt
+	// We'll use a simple bubble-like approach with comparisons
+
+	// Create a map to track the order of service keys as they appear
+	serviceOrder := make(map[string]int)
+	orderIndex := 0
+	for _, r := range results {
+		if _, exists := serviceOrder[r.Target.ServiceKey]; !exists {
+			serviceOrder[r.Target.ServiceKey] = orderIndex
+			orderIndex++
+		}
+	}
+
+	// Now sort using a comparison function
+	for i := 0; i < len(results); i++ {
+		for j := i + 1; j < len(results); j++ {
+			if compareResults(results[i], results[j], serviceOrder) > 0 {
+				results[i], results[j] = results[j], results[i]
+			}
+		}
+	}
+}
+
+// compareResults returns:
+// -1 if a should come before b
+//
+//	0 if a and b are equal
+//
+// +1 if a should come after b
+func compareResults(a, b Result, serviceOrder map[string]int) int {
+	// First compare by service_key order (as they appear in the original list)
+	aOrder, bOrder := serviceOrder[a.Target.ServiceKey], serviceOrder[b.Target.ServiceKey]
+	if aOrder < bOrder {
+		return -1
+	}
+	if aOrder > bOrder {
+		return 1
+	}
+
+	// Service keys are the same, compare by address
+	if a.Target.Address < b.Target.Address {
+		return -1
+	}
+	if a.Target.Address > b.Target.Address {
+		return 1
+	}
+
+	// Addresses are the same, compare by attempt
+	if a.Attempt < b.Attempt {
+		return -1
+	}
+	if a.Attempt > b.Attempt {
+		return 1
+	}
+
+	return 0
 }
