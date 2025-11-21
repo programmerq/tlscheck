@@ -25,12 +25,56 @@ func ResolveRuntime(ctx context.Context, opts Options) (Options, error) {
 		if resolved.PublicAddr == "" {
 			resolved.PublicAddr = profile.PublicAddr
 		}
-		resolved.ProfileSource = &ProfileInfo{Name: profile.Name, Path: profile.Path}
+
+		// Calculate expected client cert paths
+		certPath, keyPath := discovery.GetClientCertPaths(home, profile.Name, profile.Username)
+
+		// Initialize ProfileInfo with all available information
+		resolved.ProfileSource = &ProfileInfo{
+			Name:            profile.Name,
+			Path:            profile.Path,
+			Username:        profile.Username,
+			ClientCertPath:  certPath,
+			ClientKeyPath:   keyPath,
+			ClientCertFound: false, // Will be set to true if cert is successfully loaded
+		}
 
 		// Try to load the client certificate for this profile
-		if clientCert := discovery.LoadClientCert(home, profile.Name); clientCert != nil {
+		if clientCert := discovery.LoadClientCert(home, profile.Name, profile.Username); clientCert != nil {
+			resolved.ProfileSource.ClientCertFound = true
 			resolved.ClientCertPEM = clientCert.CertPEM
 			resolved.ClientKeyPEM = clientCert.KeyPEM
+
+			// Convert extensions to config package type
+			extensions := make([]CertExtension, len(clientCert.Extensions))
+			for i, ext := range clientCert.Extensions {
+				extensions[i] = CertExtension{
+					OID:      ext.OID,
+					Critical: ext.Critical,
+					Value:    ext.Value,
+				}
+			}
+
+			resolved.ClientCert = &ClientCertInfo{
+				CertPath:       clientCert.CertPath,
+				KeyPath:        clientCert.KeyPath,
+				Fingerprint:    clientCert.Fingerprint,
+				Subject:        clientCert.Subject,
+				Issuer:         clientCert.Issuer,
+				NotBefore:      clientCert.NotBefore,
+				NotAfter:       clientCert.NotAfter,
+				SerialNumber:   clientCert.SerialNumber,
+				SignatureAlgo:  clientCert.SignatureAlgo,
+				PublicKeyAlgo:  clientCert.PublicKeyAlgo,
+				KeyUsage:       clientCert.KeyUsage,
+				ExtKeyUsage:    clientCert.ExtKeyUsage,
+				DNSNames:       clientCert.DNSNames,
+				EmailAddresses: clientCert.EmailAddresses,
+				IPAddresses:    clientCert.IPAddresses,
+				URIs:           clientCert.URIs,
+				IsCA:           clientCert.IsCA,
+				Extensions:     extensions,
+			}
 		}
 	} else if resolved.PublicAddr == "" {
 		if errors.Is(profileErr, discovery.ErrNoActiveProfile) {

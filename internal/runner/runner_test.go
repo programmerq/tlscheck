@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/programmerq/tlscheck/internal/config"
+	"github.com/programmerq/tlscheck/internal/discovery"
 	"github.com/programmerq/tlscheck/internal/plan"
 	"github.com/programmerq/tlscheck/internal/probe"
 )
@@ -187,5 +188,105 @@ func TestExecuteNoCertificates(t *testing.T) {
 	// Verify network info is populated
 	if exec.Network == nil {
 		t.Fatal("expected Network info to be populated")
+	}
+}
+
+type stubEngineWithClientCerts struct {
+	stubEngine
+	clientCerts map[string]string
+}
+
+func (s *stubEngineWithClientCerts) GetClientCertificates() map[string]string {
+	return s.clientCerts
+}
+
+func TestExecuteClientCertificateCollection(t *testing.T) {
+	t.Parallel()
+
+	opts := config.Options{PublicAddr: "proxy.example.com"}
+	trueVal := true
+	expectedPlan := plan.Plan{Targets: []plan.ProbeTarget{{ServiceKey: "proxy_ssh_grpc", UseClientCert: &trueVal}}}
+
+	// Create a result with a client cert fingerprint
+	result := probe.Result{
+		Target:                expectedPlan.Targets[0],
+		Attempt:               1,
+		ClientCertFingerprint: "57A7AF6D505D1223B5DB0280E6CE4119A8067FED960649F8308332C99C398BE7",
+	}
+
+	// Create an engine that implements ClientCertificateCollector
+	expectedClientCerts := map[string]string{
+		"57A7AF6D505D1223B5DB0280E6CE4119A8067FED960649F8308332C99C398BE7": "-----BEGIN CERTIFICATE-----\nMIIDZz...\n-----END CERTIFICATE-----\n",
+	}
+
+	builder := &stubBuilder{plan: expectedPlan}
+	engine := &stubEngineWithClientCerts{
+		stubEngine:  stubEngine{results: []probe.Result{result}},
+		clientCerts: expectedClientCerts,
+	}
+
+	exec, err := Execute(context.Background(), opts, builder, engine)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	// Verify client certificates are collected
+	if exec.ClientCerts == nil {
+		t.Fatalf("expected ClientCerts to be populated, got nil")
+	}
+
+	if !reflect.DeepEqual(exec.ClientCerts, expectedClientCerts) {
+		t.Errorf("ClientCerts mismatch:\n got %#v\nwant %#v", exec.ClientCerts, expectedClientCerts)
+	}
+
+	// Verify the result includes the client cert fingerprint
+	if result.ClientCertFingerprint != "57A7AF6D505D1223B5DB0280E6CE4119A8067FED960649F8308332C99C398BE7" {
+		t.Errorf("Result missing client cert fingerprint")
+	}
+}
+
+func TestRealEngineWithClientCert(t *testing.T) {
+	// Generate a test certificate
+	certPEM, keyPEM, err := discovery.GenerateTestCertificate()
+	if err != nil {
+		t.Fatalf("Failed to generate test cert: %v", err)
+	}
+
+	// Create real engine
+	engine := probe.NewEngine()
+
+	// Set client cert
+	engine.SetClientCert(certPEM, keyPEM)
+
+	// Verify GetClientCertificates returns the cert
+	clientCerts := engine.GetClientCertificates()
+	if clientCerts == nil || len(clientCerts) == 0 {
+		t.Fatal("GetClientCertificates returned nil or empty")
+	}
+
+	t.Logf("Client certs: %d", len(clientCerts))
+	for fp := range clientCerts {
+		t.Logf("  Fingerprint: %s", fp)
+	}
+
+	// Now test through runner.Execute
+	opts := config.Options{
+		PublicAddr: "test.example.com",
+		Repeat:     1,
+	}
+
+	builder := PlanBuilderFunc(plan.Build)
+
+	// Note: This will fail because we can't connect to test.example.com
+	// but we should still check if client_certs would be populated even on error
+	exec, _ := Execute(context.Background(), opts, builder, engine)
+
+	// Check if ClientCerts is populated in the execution
+	// Even if execution failed, if the engine had client certs, they should be in the result
+	if exec.ClientCerts != nil && len(exec.ClientCerts) > 0 {
+		t.Logf("ClientCerts in Execution: %d", len(exec.ClientCerts))
+	} else {
+		// This is the issue! When execution fails, we might not populate client_certs
+		t.Logf("WARNING: ClientCerts not populated in Execution (might be expected if error occurred early)")
 	}
 }

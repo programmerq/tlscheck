@@ -1,6 +1,9 @@
 package discovery
 
 import (
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net"
@@ -8,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -15,16 +19,35 @@ import (
 // Profile describes a Teleport profile entry discovered on disk.
 type Profile struct {
 	Name         string
+	Username     string
 	PublicAddr   string
 	ClusterName  string
 	Path         string
 	WebProxyAddr string
 }
 
-// ClientCert holds the TLS client certificate and key for a profile.
+// ClientCert holds the TLS client certificate and key for a profile, along with metadata.
 type ClientCert struct {
-	CertPEM []byte
-	KeyPEM  []byte
+	CertPEM        []byte
+	KeyPEM         []byte
+	CertPath       string
+	KeyPath        string
+	Fingerprint    string
+	Subject        string
+	Issuer         string
+	NotBefore      string
+	NotAfter       string
+	SerialNumber   string
+	SignatureAlgo  string
+	PublicKeyAlgo  string
+	KeyUsage       []string
+	ExtKeyUsage    []string
+	DNSNames       []string
+	EmailAddresses []string
+	IPAddresses    []string
+	URIs           []string
+	IsCA           bool
+	Extensions     []certExtension
 }
 
 // ErrNoActiveProfile indicates that no active Teleport profile could be located.
@@ -103,6 +126,7 @@ func loadProfileFile(home, name string) (Profile, error) {
 
 	profile := Profile{
 		Name:         name,
+		Username:     strings.TrimSpace(parsed.User),
 		PublicAddr:   publicAddr,
 		ClusterName:  strings.TrimSpace(firstNonEmpty(parsed.Cluster, name)),
 		Path:         path,
@@ -174,6 +198,7 @@ type tshProfile struct {
 	SSHProxyAddr string `yaml:"ssh_proxy_addr"`
 	PublicAddr   string `yaml:"public_addr"`
 	Cluster      string `yaml:"cluster"`
+	User         string `yaml:"user"`
 }
 
 type profilesFile struct {
@@ -235,30 +260,261 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-// LoadClientCert attempts to load the TLS client certificate and key from the profile directory.
-// Returns nil if the certificate files don't exist or can't be read.
-func LoadClientCert(home, profileName string) *ClientCert {
+// GetClientCertPaths returns the expected paths for client certificate and key files.
+// It returns the Teleport 17+ format paths (preferred).
+// It does not check if the files exist.
+func GetClientCertPaths(home, profileName, username string) (certPath, keyPath string) {
 	if strings.TrimSpace(home) == "" || strings.TrimSpace(profileName) == "" {
-		return nil
+		return "", ""
 	}
 
-	// tsh stores user TLS certificates as <profile>-x509.pem in the profile directory
-	certPath := filepath.Join(home, "keys", profileName, fmt.Sprintf("%s-x509.pem", profileName))
-	keyPath := filepath.Join(home, "keys", profileName, profileName)
+	// If username is not provided, fall back to using profileName for backwards compatibility
+	if strings.TrimSpace(username) == "" {
+		username = profileName
+	}
+
+	// Teleport 17+ format (preferred)
+	// cert: ~/.tsh/keys/{profile}/{username}.pub
+	// key: ~/.tsh/keys/{profile}/{username}.key
+	certPath = filepath.Join(home, "keys", profileName, fmt.Sprintf("%s.pub", username))
+	keyPath = filepath.Join(home, "keys", profileName, fmt.Sprintf("%s.key", username))
+	return certPath, keyPath
+}
+
+// getLegacyClientCertPaths returns the Teleport 16 and below format paths.
+func getLegacyClientCertPaths(home, profileName, username string) (certPath, keyPath string) {
+	if strings.TrimSpace(home) == "" || strings.TrimSpace(profileName) == "" {
+		return "", ""
+	}
+
+	// If username is not provided, fall back to using profileName for backwards compatibility
+	if strings.TrimSpace(username) == "" {
+		username = profileName
+	}
+
+	// Teleport 16 and below format (legacy)
+	// cert: ~/.tsh/keys/{profile}/{username}-x509.pem
+	// key: ~/.tsh/keys/{profile}/{username}
+	certPath = filepath.Join(home, "keys", profileName, fmt.Sprintf("%s-x509.pem", username))
+	keyPath = filepath.Join(home, "keys", profileName, username)
+	return certPath, keyPath
+}
+
+// LoadClientCert attempts to load the TLS client certificate and key from the profile directory.
+// Returns nil if the certificate files don't exist or can't be read.
+// The username parameter should come from the profile's user field, and profileName is used for the directory path.
+// It tries Teleport 17+ format first, then falls back to Teleport 16 and below format.
+func LoadClientCert(home, profileName, username string) *ClientCert {
+	// Try Teleport 17+ format first
+	certPath, keyPath := GetClientCertPaths(home, profileName, username)
+	if certPath == "" || keyPath == "" {
+		return nil
+	}
 
 	certPEM, certErr := os.ReadFile(certPath)
 	keyPEM, keyErr := os.ReadFile(keyPath)
 
+	// If modern format doesn't exist, try legacy format
 	if certErr != nil || keyErr != nil {
-		return nil
+		certPath, keyPath = getLegacyClientCertPaths(home, profileName, username)
+		if certPath == "" || keyPath == "" {
+			return nil
+		}
+		certPEM, certErr = os.ReadFile(certPath)
+		keyPEM, keyErr = os.ReadFile(keyPath)
+
+		if certErr != nil || keyErr != nil {
+			return nil
+		}
 	}
 
 	if len(certPEM) == 0 || len(keyPEM) == 0 {
 		return nil
 	}
 
-	return &ClientCert{
-		CertPEM: certPEM,
-		KeyPEM:  keyPEM,
+	result := &ClientCert{
+		CertPEM:  certPEM,
+		KeyPEM:   keyPEM,
+		CertPath: certPath,
+		KeyPath:  keyPath,
 	}
+
+	// Parse the certificate to extract metadata
+	if cert := parseCertificateMetadata(certPEM); cert != nil {
+		result.Fingerprint = cert.Fingerprint
+		result.Subject = cert.Subject
+		result.Issuer = cert.Issuer
+		result.NotBefore = cert.NotBefore
+		result.NotAfter = cert.NotAfter
+		result.SerialNumber = cert.SerialNumber
+		result.SignatureAlgo = cert.SignatureAlgo
+		result.PublicKeyAlgo = cert.PublicKeyAlgo
+		result.KeyUsage = cert.KeyUsage
+		result.ExtKeyUsage = cert.ExtKeyUsage
+		result.DNSNames = cert.DNSNames
+		result.EmailAddresses = cert.EmailAddresses
+		result.IPAddresses = cert.IPAddresses
+		result.URIs = cert.URIs
+		result.IsCA = cert.IsCA
+		result.Extensions = cert.Extensions
+	}
+
+	return result
+}
+
+type certMetadata struct {
+	Fingerprint    string
+	Subject        string
+	Issuer         string
+	NotBefore      string
+	NotAfter       string
+	SerialNumber   string
+	SignatureAlgo  string
+	PublicKeyAlgo  string
+	KeyUsage       []string
+	ExtKeyUsage    []string
+	DNSNames       []string
+	EmailAddresses []string
+	IPAddresses    []string
+	URIs           []string
+	IsCA           bool
+	Extensions     []certExtension
+}
+
+type certExtension struct {
+	OID      string
+	Critical bool
+	Value    string
+}
+
+func parseCertificateMetadata(certPEM []byte) *certMetadata {
+	block, _ := pem.Decode(certPEM)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return nil
+	}
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil
+	}
+
+	// Calculate fingerprint (SHA-256)
+	sum := sha256.Sum256(cert.Raw)
+	fingerprint := fmt.Sprintf("%X", sum[:])
+
+	// Parse key usage
+	keyUsages := parseKeyUsage(cert.KeyUsage)
+
+	// Parse extended key usage
+	extKeyUsages := parseExtKeyUsage(cert.ExtKeyUsage)
+
+	// Convert IP addresses to strings
+	ipAddresses := make([]string, len(cert.IPAddresses))
+	for i, ip := range cert.IPAddresses {
+		ipAddresses[i] = ip.String()
+	}
+
+	// Convert URIs to strings
+	uris := make([]string, len(cert.URIs))
+	for i, uri := range cert.URIs {
+		uris[i] = uri.String()
+	}
+
+	// Parse extensions
+	extensions := make([]certExtension, 0, len(cert.Extensions))
+	for _, ext := range cert.Extensions {
+		extensions = append(extensions, certExtension{
+			OID:      ext.Id.String(),
+			Critical: ext.Critical,
+			Value:    fmt.Sprintf("%X", ext.Value),
+		})
+	}
+
+	return &certMetadata{
+		Fingerprint:    fingerprint,
+		Subject:        cert.Subject.String(),
+		Issuer:         cert.Issuer.String(),
+		NotBefore:      cert.NotBefore.UTC().Format(time.RFC3339),
+		NotAfter:       cert.NotAfter.UTC().Format(time.RFC3339),
+		SerialNumber:   cert.SerialNumber.String(),
+		SignatureAlgo:  cert.SignatureAlgorithm.String(),
+		PublicKeyAlgo:  cert.PublicKeyAlgorithm.String(),
+		KeyUsage:       keyUsages,
+		ExtKeyUsage:    extKeyUsages,
+		DNSNames:       cert.DNSNames,
+		EmailAddresses: cert.EmailAddresses,
+		IPAddresses:    ipAddresses,
+		URIs:           uris,
+		IsCA:           cert.IsCA,
+		Extensions:     extensions,
+	}
+}
+
+func parseKeyUsage(usage x509.KeyUsage) []string {
+	var usages []string
+	if usage&x509.KeyUsageDigitalSignature != 0 {
+		usages = append(usages, "DigitalSignature")
+	}
+	if usage&x509.KeyUsageContentCommitment != 0 {
+		usages = append(usages, "ContentCommitment")
+	}
+	if usage&x509.KeyUsageKeyEncipherment != 0 {
+		usages = append(usages, "KeyEncipherment")
+	}
+	if usage&x509.KeyUsageDataEncipherment != 0 {
+		usages = append(usages, "DataEncipherment")
+	}
+	if usage&x509.KeyUsageKeyAgreement != 0 {
+		usages = append(usages, "KeyAgreement")
+	}
+	if usage&x509.KeyUsageCertSign != 0 {
+		usages = append(usages, "CertSign")
+	}
+	if usage&x509.KeyUsageCRLSign != 0 {
+		usages = append(usages, "CRLSign")
+	}
+	if usage&x509.KeyUsageEncipherOnly != 0 {
+		usages = append(usages, "EncipherOnly")
+	}
+	if usage&x509.KeyUsageDecipherOnly != 0 {
+		usages = append(usages, "DecipherOnly")
+	}
+	return usages
+}
+
+func parseExtKeyUsage(usage []x509.ExtKeyUsage) []string {
+	var usages []string
+	for _, u := range usage {
+		switch u {
+		case x509.ExtKeyUsageAny:
+			usages = append(usages, "Any")
+		case x509.ExtKeyUsageServerAuth:
+			usages = append(usages, "ServerAuth")
+		case x509.ExtKeyUsageClientAuth:
+			usages = append(usages, "ClientAuth")
+		case x509.ExtKeyUsageCodeSigning:
+			usages = append(usages, "CodeSigning")
+		case x509.ExtKeyUsageEmailProtection:
+			usages = append(usages, "EmailProtection")
+		case x509.ExtKeyUsageIPSECEndSystem:
+			usages = append(usages, "IPSECEndSystem")
+		case x509.ExtKeyUsageIPSECTunnel:
+			usages = append(usages, "IPSECTunnel")
+		case x509.ExtKeyUsageIPSECUser:
+			usages = append(usages, "IPSECUser")
+		case x509.ExtKeyUsageTimeStamping:
+			usages = append(usages, "TimeStamping")
+		case x509.ExtKeyUsageOCSPSigning:
+			usages = append(usages, "OCSPSigning")
+		case x509.ExtKeyUsageMicrosoftServerGatedCrypto:
+			usages = append(usages, "MicrosoftServerGatedCrypto")
+		case x509.ExtKeyUsageNetscapeServerGatedCrypto:
+			usages = append(usages, "NetscapeServerGatedCrypto")
+		case x509.ExtKeyUsageMicrosoftCommercialCodeSigning:
+			usages = append(usages, "MicrosoftCommercialCodeSigning")
+		case x509.ExtKeyUsageMicrosoftKernelCodeSigning:
+			usages = append(usages, "MicrosoftKernelCodeSigning")
+		}
+	}
+	return usages
 }

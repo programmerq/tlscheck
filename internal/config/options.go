@@ -10,19 +10,20 @@ import (
 
 // Options captures runtime inputs supplied via the CLI.
 type Options struct {
-	PublicAddr        string        `json:"public_addr"`
-	ClusterName       string        `json:"cluster_name"`
-	TeleportVersion   string        `json:"teleport_version"`
-	WebProxyPort      int           `json:"web_proxy_port,omitempty"`
-	TLSRoutingEnabled bool          `json:"tls_routing_enabled"`
-	Repeat            int           `json:"repeat"`
-	ServiceFilter     []string      `json:"service_filter,omitempty"`
-	IPAddresses       []string      `json:"ip_addresses,omitempty"`
-	Proxy             ProxySettings `json:"proxy"`
-	ProfileSource     *ProfileInfo  `json:"profile_source,omitempty"`
-	HostCAPEM         []byte        `json:"-"`
-	ClientCertPEM     []byte        `json:"-"`
-	ClientKeyPEM      []byte        `json:"-"`
+	PublicAddr        string          `json:"public_addr"`
+	ClusterName       string          `json:"cluster_name"`
+	TeleportVersion   string          `json:"teleport_version"`
+	WebProxyPort      int             `json:"web_proxy_port,omitempty"`
+	TLSRoutingEnabled bool            `json:"tls_routing_enabled"`
+	Repeat            int             `json:"repeat"`
+	ServiceFilter     []string        `json:"service_filter,omitempty"`
+	IPAddresses       []string        `json:"ip_addresses,omitempty"`
+	Proxy             ProxySettings   `json:"proxy"`
+	ProfileSource     *ProfileInfo    `json:"profile_source,omitempty"`
+	ClientCert        *ClientCertInfo `json:"-"` // Client cert info moved to top-level client_certs
+	HostCAPEM         []byte          `json:"-"`
+	ClientCertPEM     []byte          `json:"-"`
+	ClientKeyPEM      []byte          `json:"-"`
 }
 
 // ProxySettings captures HTTP(S) proxy configuration sourced from the environment.
@@ -34,8 +35,41 @@ type ProxySettings struct {
 
 // ProfileInfo records the Teleport profile location used for automatic defaults.
 type ProfileInfo struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
+	Name            string `json:"name"`
+	Path            string `json:"path"`
+	Username        string `json:"username,omitempty"`
+	ClientCertPath  string `json:"client_cert_path,omitempty"`
+	ClientKeyPath   string `json:"client_key_path,omitempty"`
+	ClientCertFound bool   `json:"client_cert_found"`
+}
+
+// ClientCertInfo contains metadata about the client certificate used for mutual TLS.
+type ClientCertInfo struct {
+	CertPath       string          `json:"cert_path"`
+	KeyPath        string          `json:"key_path"`
+	Fingerprint    string          `json:"fingerprint"`
+	Subject        string          `json:"subject"`
+	Issuer         string          `json:"issuer"`
+	NotBefore      string          `json:"not_before"`
+	NotAfter       string          `json:"not_after"`
+	SerialNumber   string          `json:"serial_number"`
+	SignatureAlgo  string          `json:"signature_algorithm"`
+	PublicKeyAlgo  string          `json:"public_key_algorithm"`
+	KeyUsage       []string        `json:"key_usage,omitempty"`
+	ExtKeyUsage    []string        `json:"ext_key_usage,omitempty"`
+	DNSNames       []string        `json:"dns_names,omitempty"`
+	EmailAddresses []string        `json:"email_addresses,omitempty"`
+	IPAddresses    []string        `json:"ip_addresses,omitempty"`
+	URIs           []string        `json:"uris,omitempty"`
+	IsCA           bool            `json:"is_ca"`
+	Extensions     []CertExtension `json:"extensions,omitempty"`
+}
+
+// CertExtension represents a certificate extension.
+type CertExtension struct {
+	OID      string `json:"oid"`
+	Critical bool   `json:"critical"`
+	Value    string `json:"value"` // hex-encoded value
 }
 
 var usage func()

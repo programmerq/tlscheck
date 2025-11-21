@@ -35,7 +35,7 @@ type ProbeTarget struct {
 	InformationalOnly bool             `json:"informational_only,omitempty"`
 	Repeat            int              `json:"repeat"`
 	Notes             []string         `json:"notes,omitempty"`
-	UseClientCert     bool             `json:"use_client_cert,omitempty"`
+	UseClientCert     *bool            `json:"use_client_cert,omitempty"`
 	UseProxy          bool             `json:"use_proxy,omitempty"`
 	ProxyURL          string           `json:"proxy_url,omitempty"`
 }
@@ -80,6 +80,8 @@ func Build(opts config.Options) (Plan, error) {
 		DefaultUpgradePath: seq,
 	}
 
+	hasClientCert := opts.ClientCert != nil
+
 	for _, tmpl := range serviceTemplates {
 		if filtering {
 			if _, ok := tmplFilter[tmpl.Key]; !ok {
@@ -88,7 +90,7 @@ func Build(opts config.Options) (Plan, error) {
 			delete(tmplFilter, tmpl.Key)
 		}
 
-		targets := tmpl.instantiate(opts, base16Name, seq)
+		targets := tmpl.instantiate(opts, base16Name, seq, hasClientCert)
 		plan.Targets = append(plan.Targets, targets...)
 	}
 
@@ -139,7 +141,7 @@ type serviceTemplate struct {
 	UseClientCert bool
 }
 
-func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq []UpgradeAttempt) []ProbeTarget {
+func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq []UpgradeAttempt, hasClientCert bool) []ProbeTarget {
 	alpns := t.ALPNs(opts, base16Name)
 	primarySNI, additionalSNIs := t.SNIs(opts, base16Name)
 
@@ -148,13 +150,25 @@ func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq
 		return nil
 	}
 
-	targets := make([]ProbeTarget, 0, len(ports))
 	trust := t.Trust
 	if trust == "" {
 		trust = TrustSystemRoots
 	}
+
+	// If this service supports client certs and we have one, generate both with and without
+	needsDualTargets := t.UseClientCert && hasClientCert
+
+	var targets []ProbeTarget
+	if needsDualTargets {
+		// Double capacity for both with and without client cert
+		targets = make([]ProbeTarget, 0, len(ports)*2)
+	} else {
+		targets = make([]ProbeTarget, 0, len(ports))
+	}
+
 	for _, port := range ports {
-		target := ProbeTarget{
+		// Create base target configuration
+		baseTarget := ProbeTarget{
 			ServiceKey:     t.Key,
 			DisplayName:    t.DisplayName,
 			Address:        opts.PublicAddr,
@@ -166,19 +180,42 @@ func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq
 			Trust:          trust,
 			Repeat:         opts.Repeat,
 			Notes:          cloneSlice(t.Notes),
-			UseClientCert:  t.UseClientCert,
 		}
 
 		if t.NeedsUpgrade {
-			target.UpgradeSequence = cloneUpgrades(seq)
+			baseTarget.UpgradeSequence = cloneUpgrades(seq)
 		}
 
 		if t.Informational != nil && t.Informational(opts) {
-			target.InformationalOnly = true
-			target.Notes = append(target.Notes, "TLS routing disabled; treating probe outcome as informational only.")
+			baseTarget.InformationalOnly = true
+			baseTarget.Notes = append(baseTarget.Notes, "TLS routing disabled; treating probe outcome as informational only.")
 		}
 
-		targets = append(targets, target)
+		if needsDualTargets {
+			// First, add target WITH client cert
+			withCert := deepCopyProbeTarget(baseTarget)
+			trueVal := true
+			withCert.UseClientCert = &trueVal
+			withCert.Notes = append(withCert.Notes, "Using client certificate for mutual TLS")
+			targets = append(targets, withCert)
+
+			// Then, add target WITHOUT client cert
+			withoutCert := deepCopyProbeTarget(baseTarget)
+			falseVal := false
+			withoutCert.UseClientCert = &falseVal
+			withoutCert.Notes = append(withoutCert.Notes, "No client certificate (server-only TLS)")
+			targets = append(targets, withoutCert)
+		} else {
+			// Only add one target
+			// If we have a client cert, explicitly set the value (true or false)
+			// If we don't have a client cert, leave it nil (omitted from JSON)
+			if hasClientCert {
+				useClientCert := t.UseClientCert
+				baseTarget.UseClientCert = &useClientCert
+			}
+			// else: UseClientCert remains nil and will be omitted from JSON
+			targets = append(targets, baseTarget)
+		}
 	}
 
 	// Some services implicitly need to record the base16 cluster hint.
@@ -206,6 +243,18 @@ func cloneUpgrades(input []UpgradeAttempt) []UpgradeAttempt {
 	out := make([]UpgradeAttempt, len(input))
 	copy(out, input)
 	return out
+}
+
+// deepCopyProbeTarget creates a deep copy of a ProbeTarget, cloning all slice fields.
+func deepCopyProbeTarget(src ProbeTarget) ProbeTarget {
+	dst := src
+	dst.DNSResolvedIPs = cloneSlice(src.DNSResolvedIPs)
+	dst.OverrideIPs = cloneSlice(src.OverrideIPs)
+	dst.AdditionalSNIs = cloneSlice(src.AdditionalSNIs)
+	dst.ALPNs = cloneSlice(src.ALPNs)
+	dst.UpgradeSequence = cloneUpgrades(src.UpgradeSequence)
+	dst.Notes = cloneSlice(src.Notes)
+	return dst
 }
 
 var serviceTemplates = []serviceTemplate{
