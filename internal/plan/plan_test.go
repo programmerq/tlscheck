@@ -645,3 +645,86 @@ func TestDetermineProxyURL(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveDNSForTarget(t *testing.T) {
+	t.Parallel()
+
+	t.Run("resolves DNS for hostname", func(t *testing.T) {
+		target := ProbeTarget{
+			Address: "localhost",
+		}
+		resolveDNSForTarget(&target)
+
+		// localhost should resolve to at least one IP
+		if len(target.DNSResolvedIPs) == 0 {
+			t.Error("Expected DNS resolution for localhost, got none")
+		}
+		t.Logf("Resolved localhost to: %v", target.DNSResolvedIPs)
+	})
+
+	t.Run("skips DNS resolution when override IPs exist", func(t *testing.T) {
+		target := ProbeTarget{
+			Address:     "example.com",
+			OverrideIPs: []string{"1.2.3.4"},
+		}
+		resolveDNSForTarget(&target)
+
+		// Should not resolve DNS when override IPs are present
+		if len(target.DNSResolvedIPs) != 0 {
+			t.Errorf("Expected no DNS resolution when override IPs exist, got: %v", target.DNSResolvedIPs)
+		}
+	})
+
+	t.Run("handles nil target gracefully", func(t *testing.T) {
+		// Should not panic
+		resolveDNSForTarget(nil)
+	})
+
+	t.Run("handles unresolvable hostname", func(t *testing.T) {
+		target := ProbeTarget{
+			Address: "nonexistent.invalid.domain.example",
+		}
+		resolveDNSForTarget(&target)
+
+		// Should not have resolved IPs for invalid domain
+		if len(target.DNSResolvedIPs) != 0 {
+			t.Errorf("Expected no DNS resolution for invalid domain, got: %v", target.DNSResolvedIPs)
+		}
+	})
+}
+
+func TestBuildIncludesDNSResolution(t *testing.T) {
+	t.Parallel()
+
+	opts := config.Options{
+		PublicAddr:        "localhost",
+		WebProxyPort:      443,
+		ClusterName:       "test",
+		TeleportVersion:   "v15.0.0",
+		TLSRoutingEnabled: true,
+		ServiceFilter:     []string{"proxy_web"},
+	}
+
+	plan, err := Build(opts)
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+
+	if len(plan.Targets) == 0 {
+		t.Fatal("Expected at least one target")
+	}
+
+	// At least one target should have DNS resolved IPs (localhost should resolve)
+	foundDNS := false
+	for _, target := range plan.Targets {
+		if len(target.DNSResolvedIPs) > 0 {
+			foundDNS = true
+			t.Logf("Target %s has DNS IPs: %v", target.ServiceKey, target.DNSResolvedIPs)
+			break
+		}
+	}
+
+	if !foundDNS {
+		t.Error("Expected at least one target to have DNS resolved IPs")
+	}
+}

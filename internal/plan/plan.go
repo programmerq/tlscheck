@@ -3,6 +3,7 @@ package plan
 import (
 	"encoding/hex"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -100,6 +101,11 @@ func Build(opts config.Options) (Plan, error) {
 			remaining = append(remaining, key)
 		}
 		return Plan{}, fmt.Errorf("unknown services requested: %s", strings.Join(remaining, ", "))
+	}
+
+	// Resolve DNS for all targets before proxy duplication
+	for i := range plan.Targets {
+		resolveDNSForTarget(&plan.Targets[i])
 	}
 
 	// If a proxy is configured, duplicate all targets to test both with and without proxy
@@ -221,7 +227,7 @@ func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq
 	// Some services implicitly need to record the base16 cluster hint.
 	if t.Base16Hint && len(targets) > 0 && base16Name != "" {
 		targets[0].Notes = append(targets[0].Notes,
-			fmt.Sprintf("base16 cluster name hint: %s", base16Name))
+			fmt.Sprintf("Uses base16-encoded cluster name in SNI: %s", base16Name))
 	}
 
 	return targets
@@ -283,9 +289,6 @@ var serviceTemplates = []serviceTemplate{
 		SNIs: func(opts config.Options, _ string) (string, []string) {
 			return opts.PublicAddr, nil
 		},
-		Notes: []string{
-			"Probe direct IPs returned for the proxy host as well",
-		},
 		Base16Hint:    true,
 		Informational: informationalWhenSeparateListeners,
 	},
@@ -298,9 +301,6 @@ var serviceTemplates = []serviceTemplate{
 		},
 		SNIs: func(opts config.Options, _ string) (string, []string) {
 			return opts.PublicAddr, nil
-		},
-		Notes: []string{
-			"Include base16 cluster SNI when dialing resolved IPs",
 		},
 		Base16Hint:    true,
 		Informational: informationalWhenSeparateListeners,
@@ -579,4 +579,30 @@ func determineProxyURL(proxy config.ProxySettings) string {
 		return proxy.HTTPProxy
 	}
 	return ""
+}
+
+// resolveDNSForTarget resolves DNS for a target's address and populates DNSResolvedIPs.
+// It preserves the order returned by the resolver.
+func resolveDNSForTarget(target *ProbeTarget) {
+	if target == nil {
+		return
+	}
+
+	// Skip DNS resolution if we have override IPs
+	if len(target.OverrideIPs) > 0 {
+		return
+	}
+
+	// Try to resolve the address
+	resolved, err := net.LookupIP(target.Address)
+	if err != nil || len(resolved) == 0 {
+		return
+	}
+
+	// Preserve the order of IPs returned by the resolver
+	dnsIPs := make([]string, 0, len(resolved))
+	for _, ip := range resolved {
+		dnsIPs = append(dnsIPs, ip.String())
+	}
+	target.DNSResolvedIPs = dnsIPs
 }
