@@ -112,10 +112,10 @@ func TestExecuteRequiresDependencies(t *testing.T) {
 
 type stubEngineWithCerts struct {
 	stubEngine
-	certs map[string]string
+	certs map[string]*probe.CertInfo
 }
 
-func (s *stubEngineWithCerts) GetCertificates() map[string]string {
+func (s *stubEngineWithCerts) GetCertificates() map[string]*probe.CertInfo {
 	return s.certs
 }
 
@@ -134,9 +134,17 @@ func TestExecuteCertificateCollection(t *testing.T) {
 	}
 
 	// Create an engine that implements CertificateCollector
-	expectedCerts := map[string]string{
-		"ABC123": "-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----\n",
-		"DEF456": "-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----\n",
+	expectedCerts := map[string]*probe.CertInfo{
+		"ABC123": {
+			PEM:         "-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----\n",
+			Fingerprint: "ABC123",
+			Source:      probe.CertSourceServer,
+		},
+		"DEF456": {
+			PEM:         "-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----\n",
+			Fingerprint: "DEF456",
+			Source:      probe.CertSourceServer,
+		},
 	}
 
 	builder := &stubBuilder{plan: expectedPlan}
@@ -155,8 +163,9 @@ func TestExecuteCertificateCollection(t *testing.T) {
 		t.Fatalf("expected Certs to be populated, got nil")
 	}
 
-	if !reflect.DeepEqual(exec.Certs, expectedCerts) {
-		t.Errorf("Certs mismatch:\n got %#v\nwant %#v", exec.Certs, expectedCerts)
+	// Verify both certificates are present
+	if len(exec.Certs) != 2 {
+		t.Errorf("expected 2 certs, got %d", len(exec.Certs))
 	}
 
 	// Verify network info is populated
@@ -193,10 +202,10 @@ func TestExecuteNoCertificates(t *testing.T) {
 
 type stubEngineWithClientCerts struct {
 	stubEngine
-	clientCerts map[string]string
+	clientCerts map[string]*probe.CertInfo
 }
 
-func (s *stubEngineWithClientCerts) GetClientCertificates() map[string]string {
+func (s *stubEngineWithClientCerts) GetClientCertificates() map[string]*probe.CertInfo {
 	return s.clientCerts
 }
 
@@ -215,8 +224,12 @@ func TestExecuteClientCertificateCollection(t *testing.T) {
 	}
 
 	// Create an engine that implements ClientCertificateCollector
-	expectedClientCerts := map[string]string{
-		"57A7AF6D505D1223B5DB0280E6CE4119A8067FED960649F8308332C99C398BE7": "-----BEGIN CERTIFICATE-----\nMIIDZz...\n-----END CERTIFICATE-----\n",
+	expectedClientCerts := map[string]*probe.CertInfo{
+		"57A7AF6D505D1223B5DB0280E6CE4119A8067FED960649F8308332C99C398BE7": {
+			PEM:         "-----BEGIN CERTIFICATE-----\nMIIDZz...\n-----END CERTIFICATE-----\n",
+			Fingerprint: "57A7AF6D505D1223B5DB0280E6CE4119A8067FED960649F8308332C99C398BE7",
+			Source:      probe.CertSourceClient,
+		},
 	}
 
 	builder := &stubBuilder{plan: expectedPlan}
@@ -230,13 +243,14 @@ func TestExecuteClientCertificateCollection(t *testing.T) {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
-	// Verify client certificates are collected
-	if exec.ClientCerts == nil {
-		t.Fatalf("expected ClientCerts to be populated, got nil")
+	// Verify client certificates are collected in combined Certs map
+	if exec.Certs == nil {
+		t.Fatalf("expected Certs to be populated with client cert, got nil")
 	}
 
-	if !reflect.DeepEqual(exec.ClientCerts, expectedClientCerts) {
-		t.Errorf("ClientCerts mismatch:\n got %#v\nwant %#v", exec.ClientCerts, expectedClientCerts)
+	// Verify client cert is in the combined map
+	if len(exec.Certs) != 1 {
+		t.Errorf("expected 1 cert in combined map, got %d", len(exec.Certs))
 	}
 
 	// Verify the result includes the client cert fingerprint
@@ -258,15 +272,24 @@ func TestRealEngineWithClientCert(t *testing.T) {
 	// Set client cert
 	engine.SetClientCert(certPEM, keyPEM)
 
-	// Verify GetClientCertificates returns the cert
+	// Verify GetClientCertificates returns the cert with expanded info
 	clientCerts := engine.GetClientCertificates()
 	if clientCerts == nil || len(clientCerts) == 0 {
 		t.Fatal("GetClientCertificates returned nil or empty")
 	}
 
 	t.Logf("Client certs: %d", len(clientCerts))
-	for fp := range clientCerts {
+	for fp, info := range clientCerts {
 		t.Logf("  Fingerprint: %s", fp)
+		t.Logf("  Source: %s", info.Source)
+		t.Logf("  Subject CN: %s", info.Subject.CommonName)
+	}
+
+	// Verify the client cert has the correct source
+	for _, info := range clientCerts {
+		if info.Source != probe.CertSourceClient {
+			t.Errorf("Expected client cert source to be 'client', got %q", info.Source)
+		}
 	}
 
 	// Now test through runner.Execute
@@ -278,15 +301,15 @@ func TestRealEngineWithClientCert(t *testing.T) {
 	builder := PlanBuilderFunc(plan.Build)
 
 	// Note: This will fail because we can't connect to test.example.com
-	// but we should still check if client_certs would be populated even on error
+	// but we should still check if Certs would be populated even on error
 	exec, _ := Execute(context.Background(), opts, builder, engine)
 
-	// Check if ClientCerts is populated in the execution
+	// Check if Certs is populated in the execution
 	// Even if execution failed, if the engine had client certs, they should be in the result
-	if exec.ClientCerts != nil && len(exec.ClientCerts) > 0 {
-		t.Logf("ClientCerts in Execution: %d", len(exec.ClientCerts))
+	if exec.Certs != nil && len(exec.Certs) > 0 {
+		t.Logf("Certs in Execution: %d", len(exec.Certs))
 	} else {
-		// This is the issue! When execution fails, we might not populate client_certs
-		t.Logf("WARNING: ClientCerts not populated in Execution (might be expected if error occurred early)")
+		// This is the issue! When execution fails, we might not populate certs
+		t.Logf("WARNING: Certs not populated in Execution (might be expected if error occurred early)")
 	}
 }

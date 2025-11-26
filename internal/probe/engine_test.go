@@ -582,22 +582,34 @@ func TestEngineCertificateChainCapture(t *testing.T) {
 			res.LeafFingerprint, res.CertificateChain[0])
 	}
 
-	// Verify certificates are stored in PEM format
+	// Verify certificates are stored with expanded CertInfo
 	certs := engine.GetCertificates()
 	if len(certs) == 0 {
 		t.Fatalf("expected certificates to be stored in engine, got empty map")
 	}
 
-	// Verify each fingerprint in the chain has a corresponding PEM certificate
+	// Verify each fingerprint in the chain has a corresponding CertInfo
 	for i, fingerprint := range res.CertificateChain {
-		pemData, exists := certs[fingerprint]
+		certInfo, exists := certs[fingerprint]
 		if !exists {
 			t.Errorf("certificate chain[%d] fingerprint %s not found in certs map", i, fingerprint)
 			continue
 		}
 
+		// Verify the CertInfo has the expected fields populated
+		if certInfo.PEM == "" {
+			t.Errorf("certificate chain[%d] fingerprint %s: PEM is empty", i, fingerprint)
+		}
+		if certInfo.Fingerprint != fingerprint {
+			t.Errorf("certificate chain[%d]: CertInfo fingerprint %s != key fingerprint %s",
+				i, certInfo.Fingerprint, fingerprint)
+		}
+		if certInfo.Source != CertSourceServer {
+			t.Errorf("certificate chain[%d]: expected source 'server', got %q", i, certInfo.Source)
+		}
+
 		// Verify it's valid PEM
-		block, _ := pem.Decode([]byte(pemData))
+		block, _ := pem.Decode([]byte(certInfo.PEM))
 		if block == nil {
 			t.Errorf("certificate chain[%d] fingerprint %s: failed to decode PEM", i, fingerprint)
 			continue
@@ -620,10 +632,18 @@ func TestEngineCertificateChainCapture(t *testing.T) {
 			t.Errorf("certificate chain[%d]: computed fingerprint %s != stored fingerprint %s",
 				i, computedFingerprint, fingerprint)
 		}
+
+		// Verify expanded fields are populated
+		if certInfo.Subject.CommonName == "" {
+			t.Errorf("certificate chain[%d]: Subject.CommonName is empty", i)
+		}
+		if certInfo.Validity.NotBefore == "" || certInfo.Validity.NotAfter == "" {
+			t.Errorf("certificate chain[%d]: Validity dates not populated", i)
+		}
 	}
 
 	t.Logf("Successfully captured %d certificate(s) in chain", len(res.CertificateChain))
-	t.Logf("Stored %d unique certificate(s) in PEM format", len(certs))
+	t.Logf("Stored %d unique certificate(s) with expanded CertInfo", len(certs))
 }
 
 func TestEngineClientCertificate(t *testing.T) {

@@ -30,7 +30,7 @@ type Engine struct {
 	Timeout               time.Duration
 	RootCAs               *x509.CertPool
 	systemRoots           *x509.CertPool
-	certs                 map[string]string // fingerprint -> PEM
+	certs                 map[string]*CertInfo // fingerprint -> expanded cert info
 	certsMu               sync.Mutex
 	ClientCertPEM         []byte
 	ClientKeyPEM          []byte
@@ -75,8 +75,8 @@ func (e *Engine) SetClientCert(certPEM, keyPEM []byte) {
 }
 
 // GetCertificates returns the map of certificates encountered during probing.
-// The map keys are SHA-256 fingerprints (uppercase hex), and the values are PEM-encoded certificates.
-func (e *Engine) GetCertificates() map[string]string {
+// The map keys are SHA-256 fingerprints (uppercase hex), and the values are expanded CertInfo objects.
+func (e *Engine) GetCertificates() map[string]*CertInfo {
 	if e == nil {
 		return nil
 	}
@@ -84,22 +84,30 @@ func (e *Engine) GetCertificates() map[string]string {
 	defer e.certsMu.Unlock()
 
 	// Return a copy to prevent external modifications
-	result := make(map[string]string, len(e.certs))
+	result := make(map[string]*CertInfo, len(e.certs))
 	for k, v := range e.certs {
-		result[k] = v
+		// Make a copy of the CertInfo
+		infoCopy := *v
+		result[k] = &infoCopy
 	}
 	return result
 }
 
 // GetClientCertificates returns the client certificate if configured.
-// The map keys are SHA-256 fingerprints (uppercase hex), and the values are PEM-encoded certificates.
-func (e *Engine) GetClientCertificates() map[string]string {
+// The map keys are SHA-256 fingerprints (uppercase hex), and the values are expanded CertInfo objects.
+func (e *Engine) GetClientCertificates() map[string]*CertInfo {
 	if e == nil || len(e.ClientCertPEM) == 0 || e.clientCertFingerprint == "" {
 		return nil
 	}
 
-	return map[string]string{
-		e.clientCertFingerprint: string(e.ClientCertPEM),
+	info, err := ParseCertFromPEM(e.ClientCertPEM)
+	if err != nil || info == nil {
+		return nil
+	}
+	info.SetSource(CertSourceClient)
+
+	return map[string]*CertInfo{
+		e.clientCertFingerprint: info,
 	}
 }
 
@@ -139,7 +147,7 @@ func NewEngine() *Engine {
 	eng := &Engine{
 		Dialer:  &net.Dialer{Timeout: 10 * time.Second},
 		Timeout: 15 * time.Second,
-		certs:   make(map[string]string),
+		certs:   make(map[string]*CertInfo),
 	}
 
 	if pool, err := x509.SystemCertPool(); err == nil {
@@ -354,23 +362,50 @@ func (e *Engine) captureCertificateDetails(res *Result, state tls.ConnectionStat
 		res.LeafSANs = sans
 	}
 
-	// Capture the full certificate chain as fingerprints and store PEM data
+	// Capture the full certificate chain as fingerprints and store expanded CertInfo
 	chain := make([]string, 0, len(state.PeerCertificates))
 	e.certsMu.Lock()
 	defer e.certsMu.Unlock()
+
+	// Build fingerprint map for issuer fingerprint lookup
+	fingerprintMap := make(map[string]string) // subject key id -> fingerprint
+	for _, cert := range state.PeerCertificates {
+		certSum := sha256.Sum256(cert.Raw)
+		fingerprint := strings.ToUpper(hex.EncodeToString(certSum[:]))
+		if len(cert.SubjectKeyId) > 0 {
+			fingerprintMap[formatKeyID(cert.SubjectKeyId)] = fingerprint
+		}
+	}
 
 	for _, cert := range state.PeerCertificates {
 		certSum := sha256.Sum256(cert.Raw)
 		fingerprint := strings.ToUpper(hex.EncodeToString(certSum[:]))
 		chain = append(chain, fingerprint)
 
-		// Store the PEM-encoded certificate if we haven't seen it before
+		// Store expanded certificate info if we haven't seen it before
 		if _, exists := e.certs[fingerprint]; !exists {
 			pemBlock := &pem.Block{
 				Type:  "CERTIFICATE",
 				Bytes: cert.Raw,
 			}
-			e.certs[fingerprint] = string(pem.EncodeToMemory(pemBlock))
+			pemData := string(pem.EncodeToMemory(pemBlock))
+			info := ParseCertInfo(cert, pemData)
+			info.SetSource(CertSourceServer)
+
+			// Set issuer fingerprint if we have it in the chain
+			if len(cert.AuthorityKeyId) > 0 {
+				if issuerFP, ok := fingerprintMap[formatKeyID(cert.AuthorityKeyId)]; ok {
+					info.SetIssuerFingerprint(issuerFP)
+				}
+			}
+
+			// Check for MITM suspicion against reference CAs
+			referenceCAs := GetReferenceCAs()
+			if trustInfo := CheckMITMSuspicion(&info, referenceCAs); trustInfo != nil {
+				info.TrustStatus = trustInfo
+			}
+
+			e.certs[fingerprint] = &info
 		}
 	}
 	if len(chain) > 0 {

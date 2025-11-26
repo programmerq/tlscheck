@@ -23,9 +23,41 @@
 - **Version gates**: WebSocket upgrade landed in the 15.x line and is mandatory in 18+. Probes for v15–v17 should attempt both WebSocket and legacy upgrades; v18+ uses WebSocket only.
 - **Certificates**: leaf certificates from proxy or auth must chain to the cluster Host CA and present
   the expected identity. Flag mismatches. The tool captures the full certificate chain presented by
-  the server during each TLS handshake. All certificates are stored in PEM format at the top level of
-  the JSON output, indexed by SHA-256 fingerprint. This structure allows inspection of the complete
-  trust chain while avoiding duplication when the same certificate appears in multiple probe results.
+  the server during each TLS handshake. All certificates are stored at the top level of the JSON
+  output, indexed by SHA-256 fingerprint, with expanded metadata including:
+  - PEM-encoded certificate data
+  - Subject and issuer details (CN, organization, country, etc.)
+  - Validity period (not_before, not_after)
+  - Subject Alternative Names (DNS, IP, URI, email)
+  - Authority and subject key identifiers
+  - CA flag and issuer fingerprint (for chain verification)
+  - Source indicator ("server" for TLS handshake, "client" for mutual TLS)
+  - MITM detection status when issuer matches known CAs but fingerprint differs
+
+  This structure allows inspection of the complete trust chain while avoiding duplication when the
+  same certificate appears in multiple probe results. Client certificates used for mutual TLS are
+  also included in the same `certs` map with `source: "client"`.
+
+- **MITM Detection**: the tool compares encountered certificate issuers against well-known root CAs
+  (Let's Encrypt ISRG Root X1/X2, DigiCert Global Root CA/G2). If an issuer CN matches a known CA but
+  the fingerprint differs, this is flagged as potential MITM activity in the certificate's
+  `trust_status` field.
+
+## Teleport CA Endpoints
+
+Teleport clusters export CA certificates via the following endpoints (v18.x supports all types):
+
+| Type | Endpoint | Description |
+| --- | --- | --- |
+| `tls-host` | `/webapi/auth/export?type=tls-host` | Host CA for TLS connections to Teleport services |
+| `tls-user` | `/webapi/auth/export?type=tls-user` | User CA for user certificate authentication |
+| `tls-spiffe` | `/webapi/auth/export?type=tls-spiffe` | SPIFFE CA for workload identity |
+| `db` | `/webapi/auth/export?type=db` | Database CA |
+| `db-client` | `/webapi/auth/export?type=db-client` | Database client CA |
+| `awsra` | `/webapi/auth/export?type=awsra` | AWS Roles Anywhere CA |
+
+The `tls-host` CA is required for tlscheck operation. Older Teleport versions may not support all CA
+types. tlscheck automatically fetches the host CA bundle for certificate verification.
 
 ## Probe Execution Defaults
 

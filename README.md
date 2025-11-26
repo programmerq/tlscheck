@@ -45,11 +45,26 @@ The resulting JSON document contains several top-level keys:
   `host_ca_unavailable`. When a hostname resolves to multiple IPs, each IP is probed independently.
   Each result also includes a `certificate_chain` field containing an ordered list of certificate
   fingerprints (leaf first) representing the complete chain presented by the server.
-* `certs` – a map of all certificates encountered during probing, indexed by their SHA-256
-  fingerprint (uppercase hex). Each entry contains the certificate in PEM format. This structure
-  avoids duplication when the same certificate appears in multiple probe results, and allows easy
-  lookup of the full certificate data by referencing fingerprints from the `certificate_chain` field
-  in results.
+* `certs` – a map of all certificates encountered during probing (including client certificates used
+  for mutual TLS), indexed by their SHA-256 fingerprint (uppercase hex). Each entry contains expanded
+  certificate metadata:
+  - `pem` – the certificate in PEM format
+  - `fingerprint` – SHA-256 fingerprint (uppercase hex)
+  - `subject` – structured subject name (common_name, organization, country, etc.)
+  - `issuer` – structured issuer name
+  - `validity` – certificate validity period (not_before, not_after in ISO 8601 format)
+  - `sans` – Subject Alternative Names (dns, ip, uri, email arrays)
+  - `authority_key_id` – issuer key identifier (colon-separated hex)
+  - `subject_key_id` – subject key identifier
+  - `is_ca` – whether the certificate is a CA
+  - `issuer_fingerprint` – fingerprint of the issuer certificate if present in the chain
+  - `serial_number`, `signature_algorithm`, `public_key_algorithm`, `key_usage`, `ext_key_usage`
+  - `source` – how the certificate was obtained ("server" for TLS handshake, "client" for mTLS)
+  - `trust_status` – MITM detection info when issuer matches known CAs but fingerprint differs
+
+  This structure avoids duplication when the same certificate appears in multiple probe results,
+  allows easy lookup by fingerprint, and provides detailed metadata for frontend rendering without
+  requiring PEM decoding.
 
 Flags:
 

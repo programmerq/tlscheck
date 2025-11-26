@@ -29,25 +29,24 @@ type Engine interface {
 }
 
 // CertificateCollector is an optional interface that probe engines may implement
-// to provide access to collected certificates.
+// to provide access to collected certificates with expanded metadata.
 type CertificateCollector interface {
-	GetCertificates() map[string]string
+	GetCertificates() map[string]*probe.CertInfo
 }
 
 // ClientCertificateCollector is an optional interface that probe engines may implement
-// to provide access to configured client certificates.
+// to provide access to configured client certificates with expanded metadata.
 type ClientCertificateCollector interface {
-	GetClientCertificates() map[string]string
+	GetClientCertificates() map[string]*probe.CertInfo
 }
 
 // Execution captures the combination of the generated plan and the resulting probe outcomes.
 type Execution struct {
-	Arguments   *config.Options        `json:"arguments,omitempty"`
-	Network     *discovery.NetworkInfo `json:"network,omitempty"`
-	Plan        plan.Plan              `json:"plan"`
-	Results     []probe.Result         `json:"results"`
-	Certs       map[string]string      `json:"certs,omitempty"`
-	ClientCerts map[string]string      `json:"client_certs,omitempty"`
+	Arguments *config.Options            `json:"arguments,omitempty"`
+	Network   *discovery.NetworkInfo     `json:"network,omitempty"`
+	Plan      plan.Plan                  `json:"plan"`
+	Results   []probe.Result             `json:"results"`
+	Certs     map[string]*probe.CertInfo `json:"certs,omitempty"`
 }
 
 // Execute builds a probe plan using the supplied builder and executes it with the engine.
@@ -79,20 +78,27 @@ func Execute(ctx context.Context, opts config.Options, builder PlanBuilder, engi
 		Results:   results,
 	}
 
+	// Combine all certificates (server and client) into a single map
+	allCerts := make(map[string]*probe.CertInfo)
+
 	// If the engine supports certificate collection, retrieve the certificates
 	if collector, ok := engine.(CertificateCollector); ok {
 		certs := collector.GetCertificates()
-		if len(certs) > 0 {
-			exec.Certs = certs
+		for fp, info := range certs {
+			allCerts[fp] = info
 		}
 	}
 
 	// If the engine supports client certificate collection, retrieve the client certificates
 	if clientCollector, ok := engine.(ClientCertificateCollector); ok {
 		clientCerts := clientCollector.GetClientCertificates()
-		if len(clientCerts) > 0 {
-			exec.ClientCerts = clientCerts
+		for fp, info := range clientCerts {
+			allCerts[fp] = info
 		}
+	}
+
+	if len(allCerts) > 0 {
+		exec.Certs = allCerts
 	}
 
 	return exec, nil
