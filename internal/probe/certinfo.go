@@ -76,8 +76,8 @@ type CertTrustInfo struct {
 }
 
 // ParseCertInfo extracts detailed certificate information from a parsed x509 certificate.
-func ParseCertInfo(cert *x509.Certificate, pemData string) CertInfo {
-	info := CertInfo{
+func ParseCertInfo(cert *x509.Certificate, pemData string) *CertInfo {
+	info := &CertInfo{
 		PEM:         pemData,
 		Fingerprint: computeFingerprint(cert),
 		Subject:     parseCertName(cert.Subject),
@@ -241,8 +241,7 @@ func ParseCertFromPEM(pemData []byte) (*CertInfo, error) {
 		return nil, err
 	}
 
-	info := ParseCertInfo(cert, string(pemData))
-	return &info, nil
+	return ParseCertInfo(cert, string(pemData)), nil
 }
 
 // SetIssuerFingerprint sets the issuer fingerprint on a CertInfo.

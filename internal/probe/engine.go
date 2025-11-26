@@ -401,11 +401,11 @@ func (e *Engine) captureCertificateDetails(res *Result, state tls.ConnectionStat
 
 			// Check for MITM suspicion against reference CAs
 			referenceCAs := GetReferenceCAs()
-			if trustInfo := CheckMITMSuspicion(&info, referenceCAs); trustInfo != nil {
+			if trustInfo := CheckMITMSuspicion(info, referenceCAs); trustInfo != nil {
 				info.TrustStatus = trustInfo
 			}
 
-			e.certs[fingerprint] = &info
+			e.certs[fingerprint] = info
 		}
 	}
 	if len(chain) > 0 {
