@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -18,9 +19,11 @@ type ProxySettings struct {
 
 // PingInfo represents the fields gathered from /webapi/ping.
 type PingInfo struct {
-	ClusterName   string
-	ServerVersion string
-	Proxy         ProxyInfo
+	ClusterName         string
+	ServerVersion       string
+	Proxy               ProxyInfo
+	InsecureSkipVerify  bool   // Whether TLS verification was skipped
+	TLSVerificationNote string // Note about TLS verification status
 }
 
 // ProxyInfo describes the proxy configuration surfaced by /webapi/ping.
@@ -30,6 +33,9 @@ type ProxyInfo struct {
 }
 
 // FetchClusterInfo retrieves cluster metadata from the proxy's /webapi/ping endpoint.
+// TLS certificate verification is skipped to allow the tool to run in environments
+// without a complete CA trust store (e.g., bare containers). The verification status
+// is captured in PingInfo for diagnostic reporting.
 func FetchClusterInfo(ctx context.Context, publicAddr string, proxy ProxySettings) (PingInfo, error) {
 	pingURL, err := buildPingURL(publicAddr)
 	if err != nil {
@@ -43,6 +49,9 @@ func FetchClusterInfo(ctx context.Context, publicAddr string, proxy ProxySetting
 
 	transport := &http.Transport{
 		Proxy: proxyFunc(proxy),
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
 	}
 	client := &http.Client{Transport: transport, Timeout: 10 * time.Second}
 
@@ -62,8 +71,11 @@ func FetchClusterInfo(ctx context.Context, publicAddr string, proxy ProxySetting
 	}
 
 	info := PingInfo{
-		ClusterName:   strings.TrimSpace(payload.ClusterName),
-		ServerVersion: strings.TrimSpace(payload.ServerVersion),
+		ClusterName:        strings.TrimSpace(payload.ClusterName),
+		ServerVersion:      strings.TrimSpace(payload.ServerVersion),
+		InsecureSkipVerify: true,
+		TLSVerificationNote: "TLS certificate verification was skipped for initial discovery; " +
+			"the probe engine performs detailed certificate validation during probing",
 	}
 
 	if payload.Proxy != nil {

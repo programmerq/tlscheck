@@ -54,3 +54,35 @@ func TestFetchHostCAsRejectsEmptyBody(t *testing.T) {
 		t.Fatal("expected error when host CA body empty")
 	}
 }
+
+func TestFetchHostCAsSkipsTLSVerification(t *testing.T) {
+	t.Parallel()
+
+	// Use a TLS server with self-signed certificate - this would fail
+	// certificate verification if InsecureSkipVerify was not set
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/webapi/auth/export":
+			if got := r.URL.Query().Get("type"); got != "tls-host" {
+				t.Fatalf("unexpected type query: %q", got)
+			}
+			if _, err := w.Write([]byte(sampleHostCAPEM)); err != nil {
+				t.Fatalf("write host CA: %v", err)
+			}
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	// This request would fail with "x509: certificate signed by unknown authority"
+	// if InsecureSkipVerify was not set to true in the transport
+	bundle, err := FetchHostCAs(context.Background(), srv.URL, ProxySettings{})
+	if err != nil {
+		t.Fatalf("FetchHostCAs returned error (expected to skip TLS verification): %v", err)
+	}
+
+	if string(bundle) != sampleHostCAPEM {
+		t.Fatalf("unexpected bundle contents: %q", string(bundle))
+	}
+}

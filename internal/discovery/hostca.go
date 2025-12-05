@@ -3,6 +3,7 @@ package discovery
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 )
 
 // FetchHostCAs downloads the Teleport Host CA bundle from the proxy.
+// TLS certificate verification is skipped to allow the tool to run in environments
+// without a complete CA trust store (e.g., bare containers).
 func FetchHostCAs(ctx context.Context, publicAddr string, proxy ProxySettings) ([]byte, error) {
 	exportURL, err := buildExportURL(publicAddr)
 	if err != nil {
@@ -23,7 +26,12 @@ func FetchHostCAs(ctx context.Context, publicAddr string, proxy ProxySettings) (
 		return nil, fmt.Errorf("creating host CA request: %w", err)
 	}
 
-	transport := &http.Transport{Proxy: proxyFunc(proxy)}
+	transport := &http.Transport{
+		Proxy: proxyFunc(proxy),
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
 	client := &http.Client{Transport: transport, Timeout: 10 * time.Second}
 
 	resp, err := client.Do(req)
