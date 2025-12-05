@@ -58,7 +58,10 @@ func FetchHostCAsWithStatus(ctx context.Context, publicAddr string, proxy ProxyS
 	// Retry with InsecureSkipVerify
 	bundle, insecureErr := fetchHostCAsWithTLS(ctx, exportURL, proxy, true)
 	if insecureErr != nil {
-		// Both attempts failed, return the insecure error (more relevant)
+		// Both attempts failed. Return the insecure error because if both fail,
+		// the insecure error is more likely to indicate the actual connectivity
+		// problem (e.g., server unreachable) rather than a trust store issue.
+		// The original cert error is captured in TLSVerificationError on success.
 		return HostCAResult{}, insecureErr
 	}
 

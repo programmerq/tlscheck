@@ -36,22 +36,24 @@ type ProxyInfo struct {
 }
 
 // isCertVerificationError checks if the error is related to TLS certificate verification.
+// This uses both error type checking (errors.As) and string pattern matching because
+// TLS errors are often wrapped in a way that errors.As cannot unwrap.
 func isCertVerificationError(err error) bool {
 	if err == nil {
 		return false
 	}
-	errStr := err.Error()
-	// Check for common certificate verification error patterns
-	if strings.Contains(errStr, "x509:") ||
-		strings.Contains(errStr, "certificate") ||
-		strings.Contains(errStr, "tls:") {
-		return true
-	}
-	// Check for specific error types using errors.As
+	// Check for specific error types using errors.As first
 	var certErr x509.UnknownAuthorityError
 	var hostErr x509.HostnameError
 	var certInvalidErr x509.CertificateInvalidError
 	if errors.As(err, &certErr) || errors.As(err, &hostErr) || errors.As(err, &certInvalidErr) {
+		return true
+	}
+	// Fall back to string pattern matching for wrapped errors
+	// Use specific patterns to minimize false positives
+	errStr := err.Error()
+	if strings.Contains(errStr, "x509: certificate") ||
+		strings.Contains(errStr, "tls: failed to verify certificate") {
 		return true
 	}
 	return false
@@ -83,7 +85,10 @@ func FetchClusterInfo(ctx context.Context, publicAddr string, proxy ProxySetting
 	// Retry with InsecureSkipVerify
 	info, insecureErr := fetchClusterInfoWithTLS(ctx, pingURL, proxy, true)
 	if insecureErr != nil {
-		// Both attempts failed, return the insecure error (more relevant)
+		// Both attempts failed. Return the insecure error because if both fail,
+		// the insecure error is more likely to indicate the actual connectivity
+		// problem (e.g., server unreachable) rather than a trust store issue.
+		// The original cert error is captured in TLSVerificationError on success.
 		return PingInfo{}, insecureErr
 	}
 
