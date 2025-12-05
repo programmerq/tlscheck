@@ -50,11 +50,11 @@ func TestFetchClusterInfo(t *testing.T) {
 	}
 }
 
-func TestFetchClusterInfoSkipsTLSVerification(t *testing.T) {
+func TestFetchClusterInfoFallsBackOnCertError(t *testing.T) {
 	t.Parallel()
 
 	// Use a TLS server with self-signed certificate - this would fail
-	// certificate verification if InsecureSkipVerify was not set
+	// certificate verification, so the function should fall back to insecure mode
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/webapi/ping" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -75,11 +75,11 @@ func TestFetchClusterInfoSkipsTLSVerification(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	// This request would fail with "x509: certificate signed by unknown authority"
-	// if InsecureSkipVerify was not set to true in the transport
+	// This request will first fail with "x509: certificate signed by unknown authority"
+	// then retry with InsecureSkipVerify and succeed
 	info, err := FetchClusterInfo(context.Background(), srv.URL, ProxySettings{})
 	if err != nil {
-		t.Fatalf("FetchClusterInfo returned error (expected to skip TLS verification): %v", err)
+		t.Fatalf("FetchClusterInfo returned error (expected to fall back to insecure): %v", err)
 	}
 
 	if info.ClusterName != "test-cluster" {
@@ -89,11 +89,15 @@ func TestFetchClusterInfoSkipsTLSVerification(t *testing.T) {
 		t.Fatalf("ServerVersion = %q, want v18.0.0", info.ServerVersion)
 	}
 
-	// Verify InsecureSkipVerify flag is set in response
+	// Verify that we detected the verification failure and fell back
 	if !info.InsecureSkipVerify {
-		t.Fatal("expected InsecureSkipVerify to be true")
+		t.Fatal("expected InsecureSkipVerify to be true (verification failed, fell back to insecure)")
 	}
-	if info.TLSVerificationNote == "" {
-		t.Fatal("expected TLSVerificationNote to be set")
+	if info.TLSVerificationSucceeded {
+		t.Fatal("expected TLSVerificationSucceeded to be false")
 	}
+	if info.TLSVerificationError == "" {
+		t.Fatal("expected TLSVerificationError to capture the original error")
+	}
+	t.Logf("Captured TLS verification error: %s", info.TLSVerificationError)
 }

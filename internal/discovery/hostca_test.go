@@ -55,11 +55,11 @@ func TestFetchHostCAsRejectsEmptyBody(t *testing.T) {
 	}
 }
 
-func TestFetchHostCAsSkipsTLSVerification(t *testing.T) {
+func TestFetchHostCAsFallsBackOnCertError(t *testing.T) {
 	t.Parallel()
 
 	// Use a TLS server with self-signed certificate - this would fail
-	// certificate verification if InsecureSkipVerify was not set
+	// certificate verification, so the function should fall back to insecure mode
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/webapi/auth/export":
@@ -75,14 +75,52 @@ func TestFetchHostCAsSkipsTLSVerification(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	// This request would fail with "x509: certificate signed by unknown authority"
-	// if InsecureSkipVerify was not set to true in the transport
+	// This request will first fail with "x509: certificate signed by unknown authority"
+	// then retry with InsecureSkipVerify and succeed
 	bundle, err := FetchHostCAs(context.Background(), srv.URL, ProxySettings{})
 	if err != nil {
-		t.Fatalf("FetchHostCAs returned error (expected to skip TLS verification): %v", err)
+		t.Fatalf("FetchHostCAs returned error (expected to fall back to insecure): %v", err)
 	}
 
 	if string(bundle) != sampleHostCAPEM {
 		t.Fatalf("unexpected bundle contents: %q", string(bundle))
 	}
+}
+
+func TestFetchHostCAsWithStatusCapturesCertError(t *testing.T) {
+	t.Parallel()
+
+	// Use a TLS server with self-signed certificate
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/webapi/auth/export":
+			if _, err := w.Write([]byte(sampleHostCAPEM)); err != nil {
+				t.Fatalf("write host CA: %v", err)
+			}
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	result, err := FetchHostCAsWithStatus(context.Background(), srv.URL, ProxySettings{})
+	if err != nil {
+		t.Fatalf("FetchHostCAsWithStatus returned error: %v", err)
+	}
+
+	if string(result.Bundle) != sampleHostCAPEM {
+		t.Fatalf("unexpected bundle contents: %q", string(result.Bundle))
+	}
+
+	// Verify that we detected the verification failure and fell back
+	if !result.InsecureSkipVerify {
+		t.Fatal("expected InsecureSkipVerify to be true")
+	}
+	if result.TLSVerificationSucceeded {
+		t.Fatal("expected TLSVerificationSucceeded to be false")
+	}
+	if result.TLSVerificationError == "" {
+		t.Fatal("expected TLSVerificationError to capture the original error")
+	}
+	t.Logf("Captured TLS verification error: %s", result.TLSVerificationError)
 }

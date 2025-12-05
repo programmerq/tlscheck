@@ -3,7 +3,9 @@ package discovery
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -19,11 +21,12 @@ type ProxySettings struct {
 
 // PingInfo represents the fields gathered from /webapi/ping.
 type PingInfo struct {
-	ClusterName         string
-	ServerVersion       string
-	Proxy               ProxyInfo
-	InsecureSkipVerify  bool   // Whether TLS verification was skipped
-	TLSVerificationNote string // Note about TLS verification status
+	ClusterName              string
+	ServerVersion            string
+	Proxy                    ProxyInfo
+	InsecureSkipVerify       bool   // Whether TLS verification was skipped
+	TLSVerificationError     string // The certificate verification error if any
+	TLSVerificationSucceeded bool   // Whether TLS verification succeeded
 }
 
 // ProxyInfo describes the proxy configuration surfaced by /webapi/ping.
@@ -32,16 +35,67 @@ type ProxyInfo struct {
 	TLSRoutingEnabled  bool
 }
 
+// isCertVerificationError checks if the error is related to TLS certificate verification.
+func isCertVerificationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	// Check for common certificate verification error patterns
+	if strings.Contains(errStr, "x509:") ||
+		strings.Contains(errStr, "certificate") ||
+		strings.Contains(errStr, "tls:") {
+		return true
+	}
+	// Check for specific error types using errors.As
+	var certErr x509.UnknownAuthorityError
+	var hostErr x509.HostnameError
+	var certInvalidErr x509.CertificateInvalidError
+	if errors.As(err, &certErr) || errors.As(err, &hostErr) || errors.As(err, &certInvalidErr) {
+		return true
+	}
+	return false
+}
+
 // FetchClusterInfo retrieves cluster metadata from the proxy's /webapi/ping endpoint.
-// TLS certificate verification is skipped to allow the tool to run in environments
-// without a complete CA trust store (e.g., bare containers). The verification status
-// is captured in PingInfo for diagnostic reporting.
+// It first attempts with TLS verification enabled. If that fails due to certificate
+// verification issues, it retries with InsecureSkipVerify and captures the error.
 func FetchClusterInfo(ctx context.Context, publicAddr string, proxy ProxySettings) (PingInfo, error) {
 	pingURL, err := buildPingURL(publicAddr)
 	if err != nil {
 		return PingInfo{}, err
 	}
 
+	// First try with TLS verification enabled
+	info, secureErr := fetchClusterInfoWithTLS(ctx, pingURL, proxy, false)
+	if secureErr == nil {
+		// Success with verification
+		info.TLSVerificationSucceeded = true
+		return info, nil
+	}
+
+	// Check if it's a certificate verification error
+	if !isCertVerificationError(secureErr) {
+		// Not a cert error, return the original error
+		return PingInfo{}, secureErr
+	}
+
+	// Retry with InsecureSkipVerify
+	info, insecureErr := fetchClusterInfoWithTLS(ctx, pingURL, proxy, true)
+	if insecureErr != nil {
+		// Both attempts failed, return the insecure error (more relevant)
+		return PingInfo{}, insecureErr
+	}
+
+	// Succeeded with InsecureSkipVerify - capture the original verification error
+	info.InsecureSkipVerify = true
+	info.TLSVerificationError = secureErr.Error()
+	info.TLSVerificationSucceeded = false
+	return info, nil
+}
+
+// fetchClusterInfoWithTLS performs the actual HTTP request with configurable TLS verification.
+func fetchClusterInfoWithTLS(ctx context.Context, pingURL string, proxy ProxySettings, insecureSkipVerify bool) (PingInfo, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pingURL, nil)
 	if err != nil {
 		return PingInfo{}, fmt.Errorf("creating ping request: %w", err)
@@ -50,7 +104,7 @@ func FetchClusterInfo(ctx context.Context, publicAddr string, proxy ProxySetting
 	transport := &http.Transport{
 		Proxy: proxyFunc(proxy),
 		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: insecureSkipVerify,
 		},
 	}
 	client := &http.Client{Transport: transport, Timeout: 10 * time.Second}
@@ -71,11 +125,8 @@ func FetchClusterInfo(ctx context.Context, publicAddr string, proxy ProxySetting
 	}
 
 	info := PingInfo{
-		ClusterName:        strings.TrimSpace(payload.ClusterName),
-		ServerVersion:      strings.TrimSpace(payload.ServerVersion),
-		InsecureSkipVerify: true,
-		TLSVerificationNote: "TLS certificate verification was skipped for initial discovery; " +
-			"the probe engine performs detailed certificate validation during probing",
+		ClusterName:   strings.TrimSpace(payload.ClusterName),
+		ServerVersion: strings.TrimSpace(payload.ServerVersion),
 	}
 
 	if payload.Proxy != nil {
