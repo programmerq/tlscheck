@@ -89,7 +89,7 @@ format will result in a major version bump.
 - The schema is compatible with JSON Schema Draft 2020-12
 - Array fields may be `null` or `[]` (empty array) due to Go's JSON marshaling behavior
 - The `omitempty` tag is used extensively, so many fields may be absent from the output
-- Duration fields (e.g., `dial_duration_ms`, `handshake_duration_ms`) are encoded as integers representing nanoseconds, despite the `_ms` suffix in the field name
+- Duration fields (e.g., `dial_duration_ms`, `handshake_duration_ms`, `total_duration_ms`) are of type `time.Duration` in Go, which marshals to JSON as an integer representing nanoseconds. Despite the `_ms` suffix in the field names (which suggests milliseconds), the actual values are in nanoseconds. This is a known naming inconsistency in the current implementation.
 
 ## Documentation
 

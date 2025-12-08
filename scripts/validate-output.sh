@@ -19,8 +19,12 @@ if [ ! -f "$OUTPUT_FILE" ]; then
     exit 1
 fi
 
-# Create a temporary test file that validates the output
-cat > /tmp/validate_output_test.go <<'EOF'
+# Create a secure temporary test file
+TMPFILE=$(mktemp /tmp/validate_output_test.XXXXXX.go)
+trap "rm -f $TMPFILE" EXIT
+
+# Create the validation program
+cat > "$TMPFILE" <<'EOF'
 package main
 
 import (
@@ -91,7 +95,4 @@ EOF
 
 # Run the validator
 cd "$(dirname "$0")/.."
-go run /tmp/validate_output_test.go "$OUTPUT_FILE"
-
-# Clean up
-rm /tmp/validate_output_test.go
+go run "$TMPFILE" "$OUTPUT_FILE"

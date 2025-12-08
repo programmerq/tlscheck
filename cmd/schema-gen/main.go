@@ -29,8 +29,6 @@ func main() {
 		AllowAdditionalProperties: false,
 		DoNotReference:            true,
 		ExpandedStruct:            true,
-		// Allow nullable for better compatibility with Go's JSON marshaling
-		// which outputs null for nil slices
 	}
 
 	schema := reflector.Reflect(&runner.Execution{})
