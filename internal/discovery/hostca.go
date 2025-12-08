@@ -3,6 +3,7 @@ package discovery
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,19 +12,81 @@ import (
 	"time"
 )
 
+// HostCAResult contains the Host CA bundle and verification status.
+type HostCAResult struct {
+	Bundle                   []byte
+	InsecureSkipVerify       bool   // Whether TLS verification was skipped
+	TLSVerificationError     string // The certificate verification error if any
+	TLSVerificationSucceeded bool   // Whether TLS verification succeeded
+}
+
 // FetchHostCAs downloads the Teleport Host CA bundle from the proxy.
+// It first attempts with TLS verification enabled. If that fails due to certificate
+// verification issues, it retries with InsecureSkipVerify and captures the error.
 func FetchHostCAs(ctx context.Context, publicAddr string, proxy ProxySettings) ([]byte, error) {
-	exportURL, err := buildExportURL(publicAddr)
+	result, err := FetchHostCAsWithStatus(ctx, publicAddr, proxy)
 	if err != nil {
 		return nil, err
 	}
+	return result.Bundle, nil
+}
 
+// FetchHostCAsWithStatus downloads the Teleport Host CA bundle from the proxy
+// and returns detailed status about TLS verification.
+func FetchHostCAsWithStatus(ctx context.Context, publicAddr string, proxy ProxySettings) (HostCAResult, error) {
+	exportURL, err := buildExportURL(publicAddr)
+	if err != nil {
+		return HostCAResult{}, err
+	}
+
+	// First try with TLS verification enabled
+	bundle, secureErr := fetchHostCAsWithTLS(ctx, exportURL, proxy, false)
+	if secureErr == nil {
+		// Success with verification
+		return HostCAResult{
+			Bundle:                   bundle,
+			TLSVerificationSucceeded: true,
+		}, nil
+	}
+
+	// Check if it's a certificate verification error
+	if !isCertVerificationError(secureErr) {
+		// Not a cert error, return the original error
+		return HostCAResult{}, secureErr
+	}
+
+	// Retry with InsecureSkipVerify
+	bundle, insecureErr := fetchHostCAsWithTLS(ctx, exportURL, proxy, true)
+	if insecureErr != nil {
+		// Both attempts failed. Return the insecure error because if both fail,
+		// the insecure error is more likely to indicate the actual connectivity
+		// problem (e.g., server unreachable) rather than a trust store issue.
+		// The original cert error is captured in TLSVerificationError on success.
+		return HostCAResult{}, insecureErr
+	}
+
+	// Succeeded with InsecureSkipVerify - capture the original verification error
+	return HostCAResult{
+		Bundle:                   bundle,
+		InsecureSkipVerify:       true,
+		TLSVerificationError:     secureErr.Error(),
+		TLSVerificationSucceeded: false,
+	}, nil
+}
+
+// fetchHostCAsWithTLS performs the actual HTTP request with configurable TLS verification.
+func fetchHostCAsWithTLS(ctx context.Context, exportURL string, proxy ProxySettings, insecureSkipVerify bool) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, exportURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating host CA request: %w", err)
 	}
 
-	transport := &http.Transport{Proxy: proxyFunc(proxy)}
+	transport := &http.Transport{
+		Proxy: proxyFunc(proxy),
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: insecureSkipVerify,
+		},
+	}
 	client := &http.Client{Transport: transport, Timeout: 10 * time.Second}
 
 	resp, err := client.Do(req)
