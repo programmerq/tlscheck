@@ -149,6 +149,12 @@ const htmlTemplate = `<!DOCTYPE html>
             border-bottom: 1px solid #ecf0f1;
         }
 
+        /* Allow SNI and ALPN columns to wrap */
+        td:nth-child(3), td:nth-child(4) {
+            word-break: break-all;
+            max-width: 200px;
+        }
+
         tr:hover {
             background: #f8f9fa;
         }
@@ -299,6 +305,72 @@ const htmlTemplate = `<!DOCTYPE html>
             border-radius: 4px;
             margin: 10px 0;
         }
+
+        .cert-card {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 10px 0;
+            transition: all 0.3s ease;
+        }
+
+        .cert-card.highlight {
+            background: #fff3cd;
+            border-color: #ffc107;
+            box-shadow: 0 0 10px rgba(255, 193, 7, 0.5);
+        }
+
+        .cert-header {
+            font-weight: 600;
+            font-size: 1.1em;
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+
+        .cert-link {
+            color: #3498db;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .cert-link:hover {
+            text-decoration: underline;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+
+        .btn-primary {
+            background: #3498db;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2980b9;
+        }
+
+        .btn-secondary {
+            background: #95a5a6;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #7f8c8d;
+        }
     </style>
 </head>
 <body>
@@ -306,6 +378,10 @@ const htmlTemplate = `<!DOCTYPE html>
         <h1>TLS Check Results</h1>
         <div id="app"></div>
         <h2>Raw JSON Data</h2>
+        <div class="button-group">
+            <button class="btn btn-primary" onclick="downloadJSON()">Download JSON</button>
+            <button class="btn btn-secondary" onclick="copyJSON()">Copy to Clipboard</button>
+        </div>
         <button class="collapsible">Show/Hide Raw JSON</button>
         <div class="content">
             <pre id="raw-json"></pre>
@@ -399,7 +475,7 @@ const htmlTemplate = `<!DOCTYPE html>
                     if (result.leaf_fingerprint) {
                         const cert = certs[result.leaf_fingerprint];
                         if (cert && cert.subject && cert.subject.common_name) {
-                            details.push(` + "`" + `Cert: ${cert.subject.common_name}` + "`" + `);
+                            details.push(` + "`" + `Cert: <a class="cert-link" onclick="jumpToCert('${result.leaf_fingerprint}')">${escapeHtml(cert.subject.common_name)}</a>` + "`" + `);
                         }
                     }
                     html += ` + "`" + `<td>${details.join(', ')}</td>` + "`" + `;
@@ -457,6 +533,91 @@ const htmlTemplate = `<!DOCTYPE html>
             return html;
         }
 
+        function renderCertificates() {
+            const certs = tlsCheckData.certs || {};
+            const certEntries = Object.entries(certs);
+
+            if (certEntries.length === 0) {
+                return '';
+            }
+
+            let html = '<h2>Certificates</h2>';
+            
+            certEntries.forEach(([fingerprint, cert]) => {
+                html += ` + "`" + `<div class="cert-card" id="cert-${fingerprint}">` + "`" + `;
+                html += '<div class="cert-header">';
+                
+                // Display common name or "Unknown Certificate"
+                if (cert.subject && cert.subject.common_name) {
+                    html += escapeHtml(cert.subject.common_name);
+                } else {
+                    html += 'Unknown Certificate';
+                }
+                html += '</div>';
+                
+                html += '<div class="metadata">';
+                
+                // Fingerprint
+                html += createMetadataItem('Fingerprint', fingerprint);
+                
+                // Subject
+                if (cert.subject) {
+                    const subjectParts = [];
+                    if (cert.subject.common_name) subjectParts.push(` + "`" + `CN=${cert.subject.common_name}` + "`" + `);
+                    if (cert.subject.organization) subjectParts.push(` + "`" + `O=${cert.subject.organization.join(', ')}` + "`" + `);
+                    if (cert.subject.country) subjectParts.push(` + "`" + `C=${cert.subject.country.join(', ')}` + "`" + `);
+                    if (subjectParts.length > 0) {
+                        html += createMetadataItem('Subject', subjectParts.join(', '));
+                    }
+                }
+                
+                // Issuer
+                if (cert.issuer) {
+                    const issuerParts = [];
+                    if (cert.issuer.common_name) issuerParts.push(` + "`" + `CN=${cert.issuer.common_name}` + "`" + `);
+                    if (cert.issuer.organization) issuerParts.push(` + "`" + `O=${cert.issuer.organization.join(', ')}` + "`" + `);
+                    if (cert.issuer.country) issuerParts.push(` + "`" + `C=${cert.issuer.country.join(', ')}` + "`" + `);
+                    if (issuerParts.length > 0) {
+                        html += createMetadataItem('Issuer', issuerParts.join(', '));
+                    }
+                }
+                
+                // Validity
+                if (cert.validity) {
+                    if (cert.validity.not_before) {
+                        html += createMetadataItem('Valid From', new Date(cert.validity.not_before).toLocaleString());
+                    }
+                    if (cert.validity.not_after) {
+                        html += createMetadataItem('Valid Until', new Date(cert.validity.not_after).toLocaleString());
+                    }
+                }
+                
+                // SANs
+                if (cert.sans) {
+                    const sans = [];
+                    if (cert.sans.dns && cert.sans.dns.length > 0) {
+                        sans.push(...cert.sans.dns);
+                    }
+                    if (cert.sans.ip && cert.sans.ip.length > 0) {
+                        sans.push(...cert.sans.ip);
+                    }
+                    if (sans.length > 0) {
+                        html += createMetadataItem('SANs', sans.join(', '));
+                    }
+                }
+                
+                // Serial Number
+                if (cert.serial_number) {
+                    html += createMetadataItem('Serial Number', cert.serial_number);
+                }
+                
+                html += '</div>';
+                html += '</div>';
+            });
+
+            return html;
+        }
+
         function createMetadataItem(key, value) {
             return ` + "`" + `
                 <div class="metadata-item">
@@ -505,6 +666,70 @@ const htmlTemplate = `<!DOCTYPE html>
             });
         }
 
+        function jumpToCert(fingerprint) {
+            const certElement = document.getElementById(` + "`" + `cert-${fingerprint}` + "`" + `);
+            if (certElement) {
+                // Scroll to certificate
+                certElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                // Highlight temporarily
+                certElement.classList.add('highlight');
+                setTimeout(() => {
+                    certElement.classList.remove('highlight');
+                }, 3000);
+            }
+        }
+
+        function downloadJSON() {
+            const args = tlsCheckData.arguments || {};
+            const clusterName = args.cluster_name || 'tlscheck';
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+            const filename = ` + "`" + `${clusterName}-${timestamp}.json` + "`" + `;
+            
+            const jsonStr = JSON.stringify(tlsCheckData, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function copyJSON() {
+            const jsonStr = JSON.stringify(tlsCheckData, null, 2);
+            
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(jsonStr).then(() => {
+                    alert('JSON copied to clipboard!');
+                }).catch(err => {
+                    console.error('Failed to copy:', err);
+                    fallbackCopy(jsonStr);
+                });
+            } else {
+                fallbackCopy(jsonStr);
+            }
+        }
+
+        function fallbackCopy(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                alert('JSON copied to clipboard!');
+            } catch (err) {
+                alert('Failed to copy JSON. Please copy manually from the raw JSON section.');
+            }
+            document.body.removeChild(textarea);
+        }
+
         // Initialize the app
         document.addEventListener('DOMContentLoaded', function() {
             const app = document.getElementById('app');
@@ -513,6 +738,7 @@ const htmlTemplate = `<!DOCTYPE html>
             content += renderSummary();
             content += renderResults();
             content += renderNetworkInfo();
+            content += renderCertificates();
             
             app.innerHTML = content;
 
