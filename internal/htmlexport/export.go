@@ -22,9 +22,9 @@ func Write(w io.Writer, exec runner.Execution) error {
 	var escapedJSON bytes.Buffer
 	template.JSEscape(&escapedJSON, jsonData)
 
-	// Also escape for text display in <pre> tag
-	var escapedJSONForDisplay bytes.Buffer
-	template.JSEscape(&escapedJSONForDisplay, jsonData)
+	// Escape for HTML display in <pre> tag - use HTMLEscape for text content
+	var htmlEscapedJSON bytes.Buffer
+	template.HTMLEscape(&htmlEscapedJSON, jsonData)
 
 	tmpl, err := template.New("tlscheck").Parse(htmlTemplate)
 	if err != nil {
@@ -32,11 +32,11 @@ func Write(w io.Writer, exec runner.Execution) error {
 	}
 
 	data := struct {
-		JSONData            string
-		RawJSONDataEscaped  string
+		JSONData           string
+		RawJSONDataEscaped string
 	}{
 		JSONData:           escapedJSON.String(),
-		RawJSONDataEscaped: escapedJSONForDisplay.String(),
+		RawJSONDataEscaped: htmlEscapedJSON.String(),
 	}
 
 	if err := tmpl.Execute(w, data); err != nil {
