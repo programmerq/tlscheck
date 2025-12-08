@@ -121,7 +121,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, deps depe
 	}
 
 	// Output based on format
-	if resolved.OutputFormat == "html" {
+	if resolved.OutputFormat == config.OutputFormatHTML {
 		if err := renderHTML(stdout, exec); err != nil {
 			fmt.Fprintf(stderr, "failed to render HTML: %v\n", err)
 			return 1

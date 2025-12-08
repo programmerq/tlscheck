@@ -189,7 +189,7 @@ func TestRunWithHTMLOutput(t *testing.T) {
 		parseArgs: func(args []string, keys []string) (config.Options, bool, error) {
 			return config.Options{
 				PublicAddr:   "teleport.example.com",
-				OutputFormat: "html",
+				OutputFormat: config.OutputFormatHTML,
 			}, false, nil
 		},
 		resolveRuntime: func(ctx context.Context, opts config.Options) (config.Options, error) {
@@ -198,7 +198,7 @@ func TestRunWithHTMLOutput(t *testing.T) {
 			opts.Repeat = 1
 			opts.WebProxyPort = 443
 			opts.TLSRoutingEnabled = true
-			opts.OutputFormat = "html"
+			opts.OutputFormat = config.OutputFormatHTML
 			return opts, nil
 		},
 		planBuilder: runner.PlanBuilderFunc(func(opts config.Options) (plan.Plan, error) {

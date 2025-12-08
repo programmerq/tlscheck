@@ -8,6 +8,12 @@ import (
 	"strings"
 )
 
+// Output format constants
+const (
+	OutputFormatJSON = "json"
+	OutputFormatHTML = "html"
+)
+
 // Options captures runtime inputs supplied via the CLI.
 type Options struct {
 	PublicAddr        string          `json:"public_addr" jsonschema:"description=Public DNS name or IP address of the Teleport proxy server"`
@@ -102,7 +108,7 @@ func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 	fs.IntVar(&opts.Repeat, "repeat", 1, "Attempts per SNI/ALPN/IP combination (default 1)")
 	fs.StringVar(&services, "services", "all", servicesHelp)
 	fs.StringVar(&ipAddresses, "ip-addresses", "", "Comma-separated list of IP addresses to use instead of DNS resolution")
-	fs.StringVar(&opts.OutputFormat, "output-format", "json", "Output format: json or html")
+	fs.StringVar(&opts.OutputFormat, "output-format", OutputFormatJSON, fmt.Sprintf("Output format: %s or %s", OutputFormatJSON, OutputFormatHTML))
 	fs.BoolVar(&showVersion, "version", false, "Print tlscheck version and exit")
 	fs.BoolVar(&showVersion, "v", false, "Print tlscheck version and exit")
 
@@ -128,8 +134,8 @@ func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 
 	// Validate output format
 	opts.OutputFormat = strings.ToLower(strings.TrimSpace(opts.OutputFormat))
-	if opts.OutputFormat != "json" && opts.OutputFormat != "html" {
-		return Options{}, false, fmt.Errorf("output-format must be 'json' or 'html' (got %q)", opts.OutputFormat)
+	if opts.OutputFormat != OutputFormatJSON && opts.OutputFormat != OutputFormatHTML {
+		return Options{}, false, fmt.Errorf("output-format must be %q or %q (got %q)", OutputFormatJSON, OutputFormatHTML, opts.OutputFormat)
 	}
 
 	services = strings.TrimSpace(services)

@@ -22,17 +22,21 @@ func Write(w io.Writer, exec runner.Execution) error {
 	var escapedJSON bytes.Buffer
 	template.JSEscape(&escapedJSON, jsonData)
 
+	// Also escape for text display in <pre> tag
+	var escapedJSONForDisplay bytes.Buffer
+	template.JSEscape(&escapedJSONForDisplay, jsonData)
+
 	tmpl, err := template.New("tlscheck").Parse(htmlTemplate)
 	if err != nil {
 		return fmt.Errorf("failed to parse HTML template: %w", err)
 	}
 
 	data := struct {
-		JSONData       string
-		RawJSONData    string
+		JSONData            string
+		RawJSONDataEscaped  string
 	}{
-		JSONData:    escapedJSON.String(),
-		RawJSONData: string(jsonData),
+		JSONData:           escapedJSON.String(),
+		RawJSONDataEscaped: escapedJSONForDisplay.String(),
 	}
 
 	if err := tmpl.Execute(w, data); err != nil {
@@ -468,8 +472,8 @@ const htmlTemplate = `<!DOCTYPE html>
             
             app.innerHTML = content;
 
-            // Display raw JSON - using pre-formatted JSON from server
-            document.getElementById('raw-json').textContent = {{.RawJSONData | printf "%q"}};
+            // Display raw JSON - using escaped JSON from server
+            document.getElementById('raw-json').textContent = "{{.RawJSONDataEscaped}}";
 
             // Setup collapsible sections
             const collapsibles = document.querySelectorAll('.collapsible');
