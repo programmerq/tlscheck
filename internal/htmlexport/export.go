@@ -23,11 +23,11 @@ func Write(w io.Writer, exec runner.Execution) error {
 	}
 
 	data := struct {
-		JSONData    template.JS
-		RawJSONData string
+		JSONData           template.JS
+		RawJSONDataEscaped template.JSStr
 	}{
-		JSONData:    template.JS(jsonData), // Use template.JS to mark as safe JavaScript
-		RawJSONData: string(jsonData),      // Raw JSON for display without escaping
+		JSONData:           template.JS(jsonData),    // Use template.JS to mark as safe JavaScript
+		RawJSONDataEscaped: template.JSStr(jsonData), // JSStr for safe string escaping
 	}
 
 	if err := tmpl.Execute(w, data); err != nil {
@@ -517,7 +517,8 @@ const htmlTemplate = `<!DOCTYPE html>
             app.innerHTML = content;
 
             // Display raw JSON with syntax highlighting
-            const rawJson = {{.RawJSONData | printf "%q"}};
+            // RawJSONDataEscaped is safely escaped for use in JavaScript string context
+            const rawJson = "{{.RawJSONDataEscaped}}";
             document.getElementById('raw-json').innerHTML = syntaxHighlight(rawJson);
 
             // Setup collapsible sections
