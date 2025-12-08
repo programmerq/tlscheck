@@ -1,7 +1,6 @@
 package htmlexport
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -18,21 +17,17 @@ func Write(w io.Writer, exec runner.Execution) error {
 		return fmt.Errorf("failed to marshal execution data: %w", err)
 	}
 
-	// Escape for HTML display in <pre> tag - use HTMLEscape for text content
-	var htmlEscapedJSON bytes.Buffer
-	template.HTMLEscape(&htmlEscapedJSON, jsonData)
-
 	tmpl, err := template.New("tlscheck").Parse(htmlTemplate)
 	if err != nil {
 		return fmt.Errorf("failed to parse HTML template: %w", err)
 	}
 
 	data := struct {
-		JSONData           template.JS
-		RawJSONDataEscaped string
+		JSONData    template.JS
+		RawJSONData string
 	}{
-		JSONData:           template.JS(jsonData), // Use template.JS to mark as safe JavaScript
-		RawJSONDataEscaped: htmlEscapedJSON.String(),
+		JSONData:    template.JS(jsonData), // Use template.JS to mark as safe JavaScript
+		RawJSONData: string(jsonData),      // Raw JSON for display without escaping
 	}
 
 	if err := tmpl.Execute(w, data); err != nil {
@@ -230,6 +225,28 @@ const htmlTemplate = `<!DOCTYPE html>
             border-radius: 6px;
             overflow-x: auto;
             font-size: 0.9em;
+            line-height: 1.5;
+        }
+
+        /* JSON syntax highlighting */
+        .json-key {
+            color: #e67e22;
+        }
+
+        .json-string {
+            color: #2ecc71;
+        }
+
+        .json-number {
+            color: #3498db;
+        }
+
+        .json-boolean {
+            color: #e74c3c;
+        }
+
+        .json-null {
+            color: #95a5a6;
         }
 
         .filter-bar {
@@ -421,7 +438,19 @@ const htmlTemplate = `<!DOCTYPE html>
                 html += '<h3>VPN Detection</h3>';
                 html += ` + "`" + `<p><strong>VPN Detected:</strong> ${network.vpn.detected ? 'Yes' : 'No'}</p>` + "`" + `;
                 if (network.vpn.interfaces && network.vpn.interfaces.length > 0) {
-                    html += ` + "`" + `<p><strong>VPN Interfaces:</strong> ${network.vpn.interfaces.join(', ')}</p>` + "`" + `;
+                    html += '<p><strong>VPN Interfaces:</strong></p>';
+                    html += '<div class="metadata">';
+                    network.vpn.interfaces.forEach(iface => {
+                        const details = [];
+                        if (iface.name) details.push(` + "`" + `Name: ${iface.name}` + "`" + `);
+                        if (iface.type) details.push(` + "`" + `Type: ${iface.type}` + "`" + `);
+                        if (iface.status) details.push(` + "`" + `Status: ${iface.status}` + "`" + `);
+                        if (iface.addresses && iface.addresses.length > 0) {
+                            details.push(` + "`" + `Addresses: ${iface.addresses.join(', ')}` + "`" + `);
+                        }
+                        html += createMetadataItem(iface.name || 'VPN Interface', details.join(' | '));
+                    });
+                    html += '</div>';
                 }
             }
 
@@ -457,6 +486,25 @@ const htmlTemplate = `<!DOCTYPE html>
             return div.innerHTML;
         }
 
+        function syntaxHighlight(json) {
+            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                let cls = 'json-number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'json-key';
+                    } else {
+                        cls = 'json-string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'json-boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'json-null';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
+        }
+
         // Initialize the app
         document.addEventListener('DOMContentLoaded', function() {
             const app = document.getElementById('app');
@@ -468,8 +516,9 @@ const htmlTemplate = `<!DOCTYPE html>
             
             app.innerHTML = content;
 
-            // Display raw JSON - using escaped JSON from server
-            document.getElementById('raw-json').textContent = "{{.RawJSONDataEscaped}}";
+            // Display raw JSON with syntax highlighting
+            const rawJson = {{.RawJSONData | printf "%q"}};
+            document.getElementById('raw-json').innerHTML = syntaxHighlight(rawJson);
 
             // Setup collapsible sections
             const collapsibles = document.querySelectorAll('.collapsible');
