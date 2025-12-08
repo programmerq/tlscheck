@@ -41,7 +41,17 @@ The schema can be used to validate `tlscheck` output programmatically. See `inte
 
 ### Command Line Validation
 
-You can use tools like `ajv-cli` to validate output:
+You can use the provided validation script:
+
+```bash
+# Run tlscheck and save output
+./tlscheck > output.json
+
+# Validate the output against the schema
+./scripts/validate-output.sh output.json
+```
+
+Or use third-party tools like `ajv-cli`:
 
 ```bash
 # Install ajv-cli
