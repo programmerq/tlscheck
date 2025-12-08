@@ -5,69 +5,87 @@
     "arguments": {
       "properties": {
         "public_addr": {
-          "type": "string"
+          "type": "string",
+          "description": "Public DNS name or IP address of the Teleport proxy server"
         },
         "cluster_name": {
-          "type": "string"
+          "type": "string",
+          "description": "Teleport cluster name as reported by /webapi/ping"
         },
         "teleport_version": {
-          "type": "string"
+          "type": "string",
+          "description": "Semantic version of the Teleport cluster (e.g. v18.0.0)"
         },
         "web_proxy_port": {
-          "type": "integer"
+          "type": "integer",
+          "description": "TCP port number for the Teleport proxy web listener (typically 443 or 3080)"
         },
         "tls_routing_enabled": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Whether TLS routing is enabled on the Teleport cluster (multiplexes all services on one port)"
         },
         "repeat": {
-          "type": "integer"
+          "type": "integer",
+          "description": "Number of probe attempts to execute per target combination"
         },
         "service_filter": {
           "items": {
             "type": "string"
           },
-          "type": "array"
+          "type": "array",
+          "description": "Optional list of service keys to probe (e.g. proxy_web"
         },
         "ip_addresses": {
           "items": {
             "type": "string"
           },
-          "type": "array"
+          "type": "array",
+          "description": "Optional list of specific IP addresses to probe instead of DNS resolution"
         },
         "proxy": {
           "properties": {
             "https_proxy": {
-              "type": "string"
+              "type": "string",
+              "description": "HTTPS proxy URL from HTTPS_PROXY environment variable"
             },
             "http_proxy": {
-              "type": "string"
+              "type": "string",
+              "description": "HTTP proxy URL from HTTP_PROXY environment variable"
             },
             "no_proxy": {
-              "type": "string"
+              "type": "string",
+              "description": "Comma-separated list of hosts to bypass proxy from NO_PROXY environment variable"
             }
           },
           "additionalProperties": false,
-          "type": "object"
+          "type": "object",
+          "description": "HTTP/HTTPS proxy configuration detected from environment variables"
         },
         "profile_source": {
           "properties": {
             "name": {
-              "type": "string"
+              "type": "string",
+              "description": "Name of the tsh profile (typically matches the proxy address)"
             },
             "path": {
-              "type": "string"
+              "type": "string",
+              "description": "Filesystem path to the tsh profile directory"
             },
             "username": {
-              "type": "string"
+              "type": "string",
+              "description": "Teleport username from the profile"
             },
             "client_cert_path": {
-              "type": "string"
+              "type": "string",
+              "description": "Path to the client certificate file for mutual TLS"
             },
             "client_key_path": {
-              "type": "string"
+              "type": "string",
+              "description": "Path to the client certificate private key file"
             },
             "client_cert_found": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Whether a valid client certificate was found and loaded"
             }
           },
           "additionalProperties": false,
@@ -76,7 +94,8 @@
             "name",
             "path",
             "client_cert_found"
-          ]
+          ],
+          "description": "Information about the tsh profile used to populate default values"
         }
       },
       "additionalProperties": false,
@@ -88,7 +107,8 @@
         "tls_routing_enabled",
         "repeat",
         "proxy"
-      ]
+      ],
+      "description": "Parsed command-line arguments and runtime configuration used for this execution"
     },
     "network": {
       "properties": {
@@ -97,61 +117,77 @@
             "environment": {
               "properties": {
                 "https_proxy": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "HTTPS proxy URL from HTTPS_PROXY or https_proxy environment variable"
                 },
                 "http_proxy": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "HTTP proxy URL from HTTP_PROXY or http_proxy environment variable"
                 },
                 "no_proxy": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Comma-separated list of hosts to bypass proxy from NO_PROXY or no_proxy"
                 },
                 "all_proxy": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Fallback proxy URL from ALL_PROXY or all_proxy (often used for SOCKS)"
                 },
                 "ftp_proxy": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "FTP proxy URL from FTP_PROXY or ftp_proxy environment variable"
                 },
                 "parsed_hosts": {
                   "items": {
                     "type": "string"
                   },
-                  "type": "array"
+                  "type": "array",
+                  "description": "Parsed proxy host addresses extracted from proxy URLs"
                 }
               },
               "additionalProperties": false,
-              "type": "object"
+              "type": "object",
+              "description": "Proxy settings from environment variables (HTTP_PROXY"
             },
             "system_proxy": {
               "properties": {
                 "enabled": {
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "Whether system-level proxy is enabled"
                 },
                 "http_proxy": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "HTTP proxy address from system settings"
                 },
                 "https_proxy": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "HTTPS proxy address from system settings"
                 },
                 "socks_proxy": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "SOCKS proxy address from system settings"
                 },
                 "ftp_proxy": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "FTP proxy address from system settings"
                 },
                 "exclude_list": {
                   "items": {
                     "type": "string"
                   },
-                  "type": "array"
+                  "type": "array",
+                  "description": "List of domains or addresses to bypass proxy"
                 },
                 "pac_enabled": {
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "Whether Proxy Auto-Configuration is enabled"
                 },
                 "pac_url": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "URL of the PAC file if PAC is enabled"
                 },
                 "source": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Source of the system proxy settings (e.g. macOS Network Settings"
                 }
               },
               "additionalProperties": false,
@@ -160,42 +196,52 @@
                 "enabled",
                 "pac_enabled",
                 "source"
-              ]
+              ],
+              "description": "OS-level proxy settings from macOS Network Settings or Windows Registry"
             },
             "pac_file": {
               "properties": {
                 "url": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "URL where the PAC file was retrieved from"
                 },
                 "content": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Full content of the PAC file (JavaScript)"
                 },
                 "error": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Error message if PAC file could not be retrieved"
                 },
                 "retrieved": {
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "Whether the PAC file was successfully retrieved"
                 }
               },
               "additionalProperties": false,
               "type": "object",
               "required": [
                 "retrieved"
-              ]
+              ],
+              "description": "Proxy Auto-Configuration (PAC) file URL and content"
             },
             "socks_proxy": {
               "properties": {
                 "version": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "SOCKS protocol version (SOCKS4 or SOCKS5)"
                 },
                 "address": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "SOCKS proxy server address (hostname or IP)"
                 },
                 "port": {
-                  "type": "integer"
+                  "type": "integer",
+                  "description": "SOCKS proxy server port number"
                 },
                 "source": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Where this SOCKS proxy configuration was found (e.g. ALL_PROXY environment variable)"
                 }
               },
               "additionalProperties": false,
@@ -205,11 +251,13 @@
                 "address",
                 "port",
                 "source"
-              ]
+              ],
+              "description": "SOCKS proxy configuration detected from environment"
             },
             "detection_time": {
               "type": "string",
-              "format": "date-time"
+              "format": "date-time",
+              "description": "Timestamp when proxy detection was performed (UTC)"
             }
           },
           "additionalProperties": false,
@@ -217,39 +265,49 @@
           "required": [
             "environment",
             "detection_time"
-          ]
+          ],
+          "description": "Detected proxy configuration from environment variables"
         },
         "routes": {
           "properties": {
             "available": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Whether routing table information was successfully captured"
             },
             "error": {
-              "type": "string"
+              "type": "string",
+              "description": "Error message if route capture failed"
             },
             "default_gateway": {
-              "type": "string"
+              "type": "string",
+              "description": "Default gateway IP address from the routing table"
             },
             "routes": {
               "items": {
                 "properties": {
                   "destination": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Destination network in CIDR notation or 'default' for default route"
                   },
                   "gateway": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Gateway IP address for this route"
                   },
                   "netmask": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Network mask for the destination (on platforms that use netmask instead of CIDR)"
                   },
                   "interface": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Network interface name for this route (e.g. eth0"
                   },
                   "metric": {
-                    "type": "integer"
+                    "type": "integer",
+                    "description": "Route metric (lower is preferred)"
                   },
                   "flags": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Route flags indicating properties like Up"
                   }
                 },
                 "additionalProperties": false,
@@ -259,28 +317,34 @@
                   "interface"
                 ]
               },
-              "type": "array"
+              "type": "array",
+              "description": "List of routing table entries"
             },
             "interfaces": {
               "items": {
                 "properties": {
                   "name": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Network interface name (e.g. eth0"
                   },
                   "hardware_addr": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "MAC address of the interface"
                   },
                   "addresses": {
                     "items": {
                       "type": "string"
                     },
-                    "type": "array"
+                    "type": "array",
+                    "description": "IP addresses assigned to this interface in CIDR notation"
                   },
                   "flags": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Interface flags (e.g. up"
                   },
                   "mtu": {
-                    "type": "integer"
+                    "type": "integer",
+                    "description": "Maximum Transmission Unit size in bytes"
                   }
                 },
                 "additionalProperties": false,
@@ -289,41 +353,49 @@
                   "name"
                 ]
               },
-              "type": "array"
+              "type": "array",
+              "description": "List of network interfaces with their addresses"
             },
             "captured_at": {
               "type": "string",
-              "format": "date-time"
+              "format": "date-time",
+              "description": "Timestamp when routing information was captured (UTC)"
             }
           },
           "additionalProperties": false,
           "type": "object",
           "required": [
             "available"
-          ]
+          ],
+          "description": "System routing table and network interface information"
         },
         "vpn": {
           "properties": {
             "detected": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Whether any VPN connections were detected"
             },
             "interfaces": {
               "items": {
                 "properties": {
                   "name": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Interface name (e.g. tun0"
                   },
                   "type": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "VPN interface type (e.g. tun"
                   },
                   "addresses": {
                     "items": {
                       "type": "string"
                     },
-                    "type": "array"
+                    "type": "array",
+                    "description": "IP addresses assigned to this VPN interface"
                   },
                   "status": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Interface status (e.g. up"
                   }
                 },
                 "additionalProperties": false,
@@ -334,22 +406,27 @@
                   "status"
                 ]
               },
-              "type": "array"
+              "type": "array",
+              "description": "VPN network interfaces found on the system"
             },
             "applications": {
               "items": {
                 "properties": {
                   "name": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Name of the VPN application or service"
                   },
                   "type": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Type of VPN (e.g. OpenVPN"
                   },
                   "status": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Application status (e.g. running"
                   },
                   "details": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Additional details about the VPN connection"
                   }
                 },
                 "additionalProperties": false,
@@ -360,28 +437,35 @@
                   "status"
                 ]
               },
-              "type": "array"
+              "type": "array",
+              "description": "VPN applications and services detected as running"
             },
             "routes": {
               "items": {
                 "properties": {
                   "destination": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Destination network in CIDR notation or 'default' for default route"
                   },
                   "gateway": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Gateway IP address for this route"
                   },
                   "netmask": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Network mask for the destination (on platforms that use netmask instead of CIDR)"
                   },
                   "interface": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Network interface name for this route (e.g. eth0"
                   },
                   "metric": {
-                    "type": "integer"
+                    "type": "integer",
+                    "description": "Route metric (lower is preferred)"
                   },
                   "flags": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Route flags indicating properties like Up"
                   }
                 },
                 "additionalProperties": false,
@@ -391,11 +475,13 @@
                   "interface"
                 ]
               },
-              "type": "array"
+              "type": "array",
+              "description": "Routing table entries associated with VPN interfaces"
             },
             "detection_time": {
               "type": "string",
-              "format": "date-time"
+              "format": "date-time",
+              "description": "Timestamp when VPN detection was performed (UTC)"
             }
           },
           "additionalProperties": false,
@@ -403,7 +489,8 @@
           "required": [
             "detected",
             "detection_time"
-          ]
+          ],
+          "description": "VPN detection results including interfaces"
         }
       },
       "additionalProperties": false,
@@ -412,80 +499,100 @@
         "proxy_config",
         "routes",
         "vpn"
-      ]
+      ],
+      "description": "Network configuration discovery results including proxy settings"
     },
     "plan": {
       "properties": {
         "generated_at": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "description": "Timestamp when this probe plan was generated (UTC)"
         },
         "options": {
           "properties": {
             "public_addr": {
-              "type": "string"
+              "type": "string",
+              "description": "Public DNS name or IP address of the Teleport proxy server"
             },
             "cluster_name": {
-              "type": "string"
+              "type": "string",
+              "description": "Teleport cluster name as reported by /webapi/ping"
             },
             "teleport_version": {
-              "type": "string"
+              "type": "string",
+              "description": "Semantic version of the Teleport cluster (e.g. v18.0.0)"
             },
             "web_proxy_port": {
-              "type": "integer"
+              "type": "integer",
+              "description": "TCP port number for the Teleport proxy web listener (typically 443 or 3080)"
             },
             "tls_routing_enabled": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Whether TLS routing is enabled on the Teleport cluster (multiplexes all services on one port)"
             },
             "repeat": {
-              "type": "integer"
+              "type": "integer",
+              "description": "Number of probe attempts to execute per target combination"
             },
             "service_filter": {
               "items": {
                 "type": "string"
               },
-              "type": "array"
+              "type": "array",
+              "description": "Optional list of service keys to probe (e.g. proxy_web"
             },
             "ip_addresses": {
               "items": {
                 "type": "string"
               },
-              "type": "array"
+              "type": "array",
+              "description": "Optional list of specific IP addresses to probe instead of DNS resolution"
             },
             "proxy": {
               "properties": {
                 "https_proxy": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "HTTPS proxy URL from HTTPS_PROXY environment variable"
                 },
                 "http_proxy": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "HTTP proxy URL from HTTP_PROXY environment variable"
                 },
                 "no_proxy": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Comma-separated list of hosts to bypass proxy from NO_PROXY environment variable"
                 }
               },
               "additionalProperties": false,
-              "type": "object"
+              "type": "object",
+              "description": "HTTP/HTTPS proxy configuration detected from environment variables"
             },
             "profile_source": {
               "properties": {
                 "name": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Name of the tsh profile (typically matches the proxy address)"
                 },
                 "path": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Filesystem path to the tsh profile directory"
                 },
                 "username": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Teleport username from the profile"
                 },
                 "client_cert_path": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Path to the client certificate file for mutual TLS"
                 },
                 "client_key_path": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Path to the client certificate private key file"
                 },
                 "client_cert_found": {
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "Whether a valid client certificate was found and loaded"
                 }
               },
               "additionalProperties": false,
@@ -494,7 +601,8 @@
                 "name",
                 "path",
                 "client_cert_found"
-              ]
+              ],
+              "description": "Information about the tsh profile used to populate default values"
             }
           },
           "additionalProperties": false,
@@ -506,22 +614,27 @@
             "tls_routing_enabled",
             "repeat",
             "proxy"
-          ]
+          ],
+          "description": "Configuration options that were used to generate this plan"
         },
         "version_band": {
-          "type": "string"
+          "type": "string",
+          "description": "Teleport version category (e.g. v18+"
         },
         "base16_cluster_name": {
-          "type": "string"
+          "type": "string",
+          "description": "Hexadecimal-encoded cluster name used in SNI for some Teleport services"
         },
         "default_upgrade_path": {
           "items": {
             "properties": {
               "token": {
-                "type": "string"
+                "type": "string",
+                "description": "Upgrade token to send in the Upgrade HTTP header (e.g. websocket"
               },
               "path": {
-                "type": "string"
+                "type": "string",
+                "description": "HTTP path to request for the upgrade attempt (e.g. /webapi/connectionupgrade)"
               }
             },
             "additionalProperties": false,
@@ -531,58 +644,70 @@
               "path"
             ]
           },
-          "type": "array"
+          "type": "array",
+          "description": "Default HTTP upgrade header sequence to use for connection upgrade attempts"
         },
         "targets": {
           "items": {
             "properties": {
               "service_key": {
-                "type": "string"
+                "type": "string",
+                "description": "Identifier for the Teleport service being probed (e.g. proxy_web"
               },
               "display_name": {
-                "type": "string"
+                "type": "string",
+                "description": "Human-readable name for the service being probed"
               },
               "address": {
-                "type": "string"
+                "type": "string",
+                "description": "DNS name or IP address to connect to"
               },
               "dns_resolved_ips": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "IP addresses resolved from DNS for this target (in order returned by resolver)"
               },
               "override_ips": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "User-specified IP addresses to use instead of DNS resolution"
               },
               "port": {
-                "type": "integer"
+                "type": "integer",
+                "description": "TCP port number to connect to"
               },
               "primary_sni": {
-                "type": "string"
+                "type": "string",
+                "description": "Server Name Indication (SNI) value to use in the TLS handshake"
               },
               "additional_snis": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "Alternative SNI values to try if primary fails"
               },
               "alpns": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "Application-Layer Protocol Negotiation (ALPN) protocols to request (e.g. h2"
               },
               "upgrade_sequence": {
                 "items": {
                   "properties": {
                     "token": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Upgrade token to send in the Upgrade HTTP header (e.g. websocket"
                     },
                     "path": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "HTTP path to request for the upgrade attempt (e.g. /webapi/connectionupgrade)"
                     }
                   },
                   "additionalProperties": false,
@@ -592,31 +717,39 @@
                     "path"
                   ]
                 },
-                "type": "array"
+                "type": "array",
+                "description": "HTTP upgrade header sequence to use for this target"
               },
               "trust": {
-                "type": "string"
+                "type": "string",
+                "description": "Certificate trust strategy: system (OS cert store) or host_ca (Teleport host CA bundle)"
               },
               "informational_only": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "When true"
               },
               "repeat": {
-                "type": "integer"
+                "type": "integer",
+                "description": "Number of times to probe this target"
               },
               "notes": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "Human-readable notes about this probe target's purpose or expected behavior"
               },
               "use_client_cert": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "Whether to use client certificate for mutual TLS authentication"
               },
               "use_proxy": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "Whether to use HTTP/HTTPS proxy for this connection"
               },
               "proxy_url": {
-                "type": "string"
+                "type": "string",
+                "description": "Proxy URL to use if use_proxy is true"
               }
             },
             "additionalProperties": false,
@@ -633,7 +766,8 @@
               "repeat"
             ]
           },
-          "type": "array"
+          "type": "array",
+          "description": "List of all probe targets to execute"
         }
       },
       "additionalProperties": false,
@@ -645,7 +779,8 @@
         "base16_cluster_name",
         "default_upgrade_path",
         "targets"
-      ]
+      ],
+      "description": "Generated probe execution plan with all target combinations to be tested"
     },
     "results": {
       "items": {
@@ -653,52 +788,63 @@
           "target": {
             "properties": {
               "service_key": {
-                "type": "string"
+                "type": "string",
+                "description": "Identifier for the Teleport service being probed (e.g. proxy_web"
               },
               "display_name": {
-                "type": "string"
+                "type": "string",
+                "description": "Human-readable name for the service being probed"
               },
               "address": {
-                "type": "string"
+                "type": "string",
+                "description": "DNS name or IP address to connect to"
               },
               "dns_resolved_ips": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "IP addresses resolved from DNS for this target (in order returned by resolver)"
               },
               "override_ips": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "User-specified IP addresses to use instead of DNS resolution"
               },
               "port": {
-                "type": "integer"
+                "type": "integer",
+                "description": "TCP port number to connect to"
               },
               "primary_sni": {
-                "type": "string"
+                "type": "string",
+                "description": "Server Name Indication (SNI) value to use in the TLS handshake"
               },
               "additional_snis": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "Alternative SNI values to try if primary fails"
               },
               "alpns": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "Application-Layer Protocol Negotiation (ALPN) protocols to request (e.g. h2"
               },
               "upgrade_sequence": {
                 "items": {
                   "properties": {
                     "token": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Upgrade token to send in the Upgrade HTTP header (e.g. websocket"
                     },
                     "path": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "HTTP path to request for the upgrade attempt (e.g. /webapi/connectionupgrade)"
                     }
                   },
                   "additionalProperties": false,
@@ -708,31 +854,39 @@
                     "path"
                   ]
                 },
-                "type": "array"
+                "type": "array",
+                "description": "HTTP upgrade header sequence to use for this target"
               },
               "trust": {
-                "type": "string"
+                "type": "string",
+                "description": "Certificate trust strategy: system (OS cert store) or host_ca (Teleport host CA bundle)"
               },
               "informational_only": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "When true"
               },
               "repeat": {
-                "type": "integer"
+                "type": "integer",
+                "description": "Number of times to probe this target"
               },
               "notes": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "Human-readable notes about this probe target's purpose or expected behavior"
               },
               "use_client_cert": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "Whether to use client certificate for mutual TLS authentication"
               },
               "use_proxy": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "Whether to use HTTP/HTTPS proxy for this connection"
               },
               "proxy_url": {
-                "type": "string"
+                "type": "string",
+                "description": "Proxy URL to use if use_proxy is true"
               }
             },
             "additionalProperties": false,
@@ -747,79 +901,101 @@
               "upgrade_sequence",
               "trust",
               "repeat"
-            ]
+            ],
+            "description": "The probe target configuration that was tested"
           },
           "attempt": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Attempt number for this target (starts at 1)"
           },
           "timestamp": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Timestamp when this probe was executed (UTC)"
           },
           "local_addr": {
-            "type": "string"
+            "type": "string",
+            "description": "Local socket address (IP:port) used for the connection"
           },
           "remote_addr": {
-            "type": "string"
+            "type": "string",
+            "description": "Remote socket address (IP:port) that was connected to"
           },
           "resolved_ip": {
-            "type": "string"
+            "type": "string",
+            "description": "IP address extracted from the remote address"
           },
           "bytes_written": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Total bytes written during the TLS handshake"
           },
           "bytes_read": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Total bytes read during the TLS handshake"
           },
           "dial_duration_ms": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Time taken to establish TCP connection in nanoseconds (despite _ms suffix)"
           },
           "handshake_duration_ms": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Time taken to complete TLS handshake in nanoseconds (despite _ms suffix)"
           },
           "total_duration_ms": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Total time from start to finish in nanoseconds (despite _ms suffix)"
           },
           "tls_version": {
-            "type": "string"
+            "type": "string",
+            "description": "Negotiated TLS protocol version (e.g. TLS 1.3)"
           },
           "cipher_suite": {
-            "type": "string"
+            "type": "string",
+            "description": "Negotiated TLS cipher suite name"
           },
           "negotiated_protocol": {
-            "type": "string"
+            "type": "string",
+            "description": "ALPN protocol that was successfully negotiated"
           },
           "leaf_subject": {
-            "type": "string"
+            "type": "string",
+            "description": "Subject DN of the server's leaf certificate"
           },
           "leaf_issuer": {
-            "type": "string"
+            "type": "string",
+            "description": "Issuer DN of the server's leaf certificate"
           },
           "leaf_sans": {
             "items": {
               "type": "string"
             },
-            "type": "array"
+            "type": "array",
+            "description": "Subject Alternative Names from the server's leaf certificate (DNS names"
           },
           "leaf_fingerprint": {
-            "type": "string"
+            "type": "string",
+            "description": "SHA-256 fingerprint of the server's leaf certificate (uppercase hex)"
           },
           "certificate_chain": {
             "items": {
               "type": "string"
             },
-            "type": "array"
+            "type": "array",
+            "description": "Ordered list of certificate fingerprints in the chain (leaf first)"
           },
           "client_cert_fingerprint": {
-            "type": "string"
+            "type": "string",
+            "description": "SHA-256 fingerprint of the client certificate used for mutual TLS (if any)"
           },
           "failure": {
             "properties": {
               "kind": {
-                "type": "string"
+                "type": "string",
+                "description": "Classification of the failure (e.g. timeout"
               },
               "message": {
-                "type": "string"
+                "type": "string",
+                "description": "Human-readable error message describing what went wrong"
               }
             },
             "additionalProperties": false,
@@ -827,7 +1003,8 @@
             "required": [
               "kind",
               "message"
-            ]
+            ],
+            "description": "Failure details if the probe did not succeed"
           }
         },
         "additionalProperties": false,
@@ -838,108 +1015,129 @@
           "timestamp"
         ]
       },
-      "type": "array"
+      "type": "array",
+      "description": "Individual probe results for each target"
     },
     "certs": {
       "additionalProperties": {
         "properties": {
           "pem": {
-            "type": "string"
+            "type": "string",
+            "description": "Certificate in PEM-encoded format"
           },
           "fingerprint": {
-            "type": "string"
+            "type": "string",
+            "description": "SHA-256 fingerprint of the certificate (uppercase hex)"
           },
           "subject": {
             "properties": {
               "common_name": {
-                "type": "string"
+                "type": "string",
+                "description": "Common Name (CN) from the distinguished name"
               },
               "organization": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "Organization (O) values from the distinguished name"
               },
               "organizational_unit": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "Organizational Unit (OU) values from the distinguished name"
               },
               "country": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "Country (C) values from the distinguished name"
               },
               "province": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "Province/State (ST) values from the distinguished name"
               },
               "locality": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "Locality/City (L) values from the distinguished name"
               },
               "serial_number": {
-                "type": "string"
+                "type": "string",
+                "description": "Serial number from the distinguished name (distinct from certificate serial number)"
               }
             },
             "additionalProperties": false,
-            "type": "object"
+            "type": "object",
+            "description": "Subject distinguished name from the certificate"
           },
           "issuer": {
             "properties": {
               "common_name": {
-                "type": "string"
+                "type": "string",
+                "description": "Common Name (CN) from the distinguished name"
               },
               "organization": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "Organization (O) values from the distinguished name"
               },
               "organizational_unit": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "Organizational Unit (OU) values from the distinguished name"
               },
               "country": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "Country (C) values from the distinguished name"
               },
               "province": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "Province/State (ST) values from the distinguished name"
               },
               "locality": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "Locality/City (L) values from the distinguished name"
               },
               "serial_number": {
-                "type": "string"
+                "type": "string",
+                "description": "Serial number from the distinguished name (distinct from certificate serial number)"
               }
             },
             "additionalProperties": false,
-            "type": "object"
+            "type": "object",
+            "description": "Issuer distinguished name from the certificate"
           },
           "validity": {
             "properties": {
               "not_before": {
-                "type": "string"
+                "type": "string",
+                "description": "Timestamp when the certificate becomes valid (ISO 8601 format)"
               },
               "not_after": {
-                "type": "string"
+                "type": "string",
+                "description": "Timestamp when the certificate expires (ISO 8601 format)"
               }
             },
             "additionalProperties": false,
@@ -947,7 +1145,8 @@
             "required": [
               "not_before",
               "not_after"
-            ]
+            ],
+            "description": "Certificate validity period (notBefore and notAfter timestamps)"
           },
           "sans": {
             "properties": {
@@ -955,65 +1154,80 @@
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "DNS names from the Subject Alternative Name extension"
               },
               "ip": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "IP addresses from the Subject Alternative Name extension"
               },
               "uri": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "URIs from the Subject Alternative Name extension"
               },
               "email": {
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "Email addresses from the Subject Alternative Name extension"
               }
             },
             "additionalProperties": false,
-            "type": "object"
+            "type": "object",
+            "description": "Subject Alternative Names from the certificate"
           },
           "authority_key_id": {
-            "type": "string"
+            "type": "string",
+            "description": "Authority Key Identifier extension (colon-separated hex bytes)"
           },
           "subject_key_id": {
-            "type": "string"
+            "type": "string",
+            "description": "Subject Key Identifier extension (colon-separated hex bytes)"
           },
           "is_ca": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Whether this certificate is a Certificate Authority"
           },
           "issuer_fingerprint": {
-            "type": "string"
+            "type": "string",
+            "description": "SHA-256 fingerprint of the issuer's certificate if present in the chain"
           },
           "serial_number": {
-            "type": "string"
+            "type": "string",
+            "description": "Certificate serial number as a decimal string"
           },
           "signature_algorithm": {
-            "type": "string"
+            "type": "string",
+            "description": "Signature algorithm used (e.g. SHA256-RSA"
           },
           "public_key_algorithm": {
-            "type": "string"
+            "type": "string",
+            "description": "Public key algorithm (e.g. RSA"
           },
           "key_usage": {
             "items": {
               "type": "string"
             },
-            "type": "array"
+            "type": "array",
+            "description": "Key usage extensions (e.g. DigitalSignature"
           },
           "ext_key_usage": {
             "items": {
               "type": "string"
             },
-            "type": "array"
+            "type": "array",
+            "description": "Extended key usage extensions (e.g. ServerAuth"
           },
           "source": {
-            "type": "string"
+            "type": "string",
+            "description": "How this certificate was obtained (server"
           },
           "trust_status": {
             "properties": {
@@ -1021,20 +1235,25 @@
                 "items": {
                   "type": "string"
                 },
-                "type": "array"
+                "type": "array",
+                "description": "List of known certificate authorities that could have issued this certificate"
               },
               "mitm_suspected": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "Whether this certificate might be from a man-in-the-middle proxy"
               },
               "mitm_reason": {
-                "type": "string"
+                "type": "string",
+                "description": "Explanation of why MITM is suspected"
               },
               "matches_reference": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "Whether this certificate matches a known reference certificate"
               }
             },
             "additionalProperties": false,
-            "type": "object"
+            "type": "object",
+            "description": "Trust and MITM detection information for this certificate"
           }
         },
         "additionalProperties": false,
@@ -1049,7 +1268,8 @@
           "is_ca"
         ]
       },
-      "type": "object"
+      "type": "object",
+      "description": "Map of all certificates encountered during probing"
     }
   },
   "additionalProperties": false,

@@ -10,16 +10,16 @@ import (
 
 // Options captures runtime inputs supplied via the CLI.
 type Options struct {
-	PublicAddr        string          `json:"public_addr"`
-	ClusterName       string          `json:"cluster_name"`
-	TeleportVersion   string          `json:"teleport_version"`
-	WebProxyPort      int             `json:"web_proxy_port,omitempty"`
-	TLSRoutingEnabled bool            `json:"tls_routing_enabled"`
-	Repeat            int             `json:"repeat"`
-	ServiceFilter     []string        `json:"service_filter,omitempty"`
-	IPAddresses       []string        `json:"ip_addresses,omitempty"`
-	Proxy             ProxySettings   `json:"proxy"`
-	ProfileSource     *ProfileInfo    `json:"profile_source,omitempty"`
+	PublicAddr        string          `json:"public_addr" jsonschema:"description=Public DNS name or IP address of the Teleport proxy server"`
+	ClusterName       string          `json:"cluster_name" jsonschema:"description=Teleport cluster name as reported by /webapi/ping"`
+	TeleportVersion   string          `json:"teleport_version" jsonschema:"description=Semantic version of the Teleport cluster (e.g. v18.0.0)"`
+	WebProxyPort      int             `json:"web_proxy_port,omitempty" jsonschema:"description=TCP port number for the Teleport proxy web listener (typically 443 or 3080)"`
+	TLSRoutingEnabled bool            `json:"tls_routing_enabled" jsonschema:"description=Whether TLS routing is enabled on the Teleport cluster (multiplexes all services on one port)"`
+	Repeat            int             `json:"repeat" jsonschema:"description=Number of probe attempts to execute per target combination"`
+	ServiceFilter     []string        `json:"service_filter,omitempty" jsonschema:"description=Optional list of service keys to probe (e.g. proxy_web, proxy_ssh). When empty, all services are probed"`
+	IPAddresses       []string        `json:"ip_addresses,omitempty" jsonschema:"description=Optional list of specific IP addresses to probe instead of DNS resolution"`
+	Proxy             ProxySettings   `json:"proxy" jsonschema:"description=HTTP/HTTPS proxy configuration detected from environment variables"`
+	ProfileSource     *ProfileInfo    `json:"profile_source,omitempty" jsonschema:"description=Information about the tsh profile used to populate default values"`
 	ClientCert        *ClientCertInfo `json:"-"` // Client cert info moved to top-level client_certs
 	HostCAPEM         []byte          `json:"-"`
 	ClientCertPEM     []byte          `json:"-"`
@@ -28,19 +28,19 @@ type Options struct {
 
 // ProxySettings captures HTTP(S) proxy configuration sourced from the environment.
 type ProxySettings struct {
-	HTTPSProxy string `json:"https_proxy,omitempty"`
-	HTTPProxy  string `json:"http_proxy,omitempty"`
-	NoProxy    string `json:"no_proxy,omitempty"`
+	HTTPSProxy string `json:"https_proxy,omitempty" jsonschema:"description=HTTPS proxy URL from HTTPS_PROXY environment variable"`
+	HTTPProxy  string `json:"http_proxy,omitempty" jsonschema:"description=HTTP proxy URL from HTTP_PROXY environment variable"`
+	NoProxy    string `json:"no_proxy,omitempty" jsonschema:"description=Comma-separated list of hosts to bypass proxy from NO_PROXY environment variable"`
 }
 
 // ProfileInfo records the Teleport profile location used for automatic defaults.
 type ProfileInfo struct {
-	Name            string `json:"name"`
-	Path            string `json:"path"`
-	Username        string `json:"username,omitempty"`
-	ClientCertPath  string `json:"client_cert_path,omitempty"`
-	ClientKeyPath   string `json:"client_key_path,omitempty"`
-	ClientCertFound bool   `json:"client_cert_found"`
+	Name            string `json:"name" jsonschema:"description=Name of the tsh profile (typically matches the proxy address)"`
+	Path            string `json:"path" jsonschema:"description=Filesystem path to the tsh profile directory"`
+	Username        string `json:"username,omitempty" jsonschema:"description=Teleport username from the profile"`
+	ClientCertPath  string `json:"client_cert_path,omitempty" jsonschema:"description=Path to the client certificate file for mutual TLS"`
+	ClientKeyPath   string `json:"client_key_path,omitempty" jsonschema:"description=Path to the client certificate private key file"`
+	ClientCertFound bool   `json:"client_cert_found" jsonschema:"description=Whether a valid client certificate was found and loaded"`
 }
 
 // ClientCertInfo contains metadata about the client certificate used for mutual TLS.

@@ -113,33 +113,33 @@ func (e *Engine) GetClientCertificates() map[string]*CertInfo {
 
 // Result captures the outcome of a single probe attempt.
 type Result struct {
-	Target                plan.ProbeTarget `json:"target"`
-	Attempt               int              `json:"attempt"`
-	Timestamp             time.Time        `json:"timestamp"`
-	LocalAddr             string           `json:"local_addr,omitempty"`
-	RemoteAddr            string           `json:"remote_addr,omitempty"`
-	ResolvedIP            string           `json:"resolved_ip,omitempty"`
-	BytesWritten          int64            `json:"bytes_written,omitempty"`
-	BytesRead             int64            `json:"bytes_read,omitempty"`
-	DialDuration          time.Duration    `json:"dial_duration_ms,omitempty"`
-	HandshakeDuration     time.Duration    `json:"handshake_duration_ms,omitempty"`
-	TotalDuration         time.Duration    `json:"total_duration_ms,omitempty"`
-	TLSVersion            string           `json:"tls_version,omitempty"`
-	CipherSuite           string           `json:"cipher_suite,omitempty"`
-	NegotiatedProtocol    string           `json:"negotiated_protocol,omitempty"`
-	LeafSubject           string           `json:"leaf_subject,omitempty"`
-	LeafIssuer            string           `json:"leaf_issuer,omitempty"`
-	LeafSANs              []string         `json:"leaf_sans,omitempty"`
-	LeafFingerprint       string           `json:"leaf_fingerprint,omitempty"`
-	CertificateChain      []string         `json:"certificate_chain,omitempty"`
-	ClientCertFingerprint string           `json:"client_cert_fingerprint,omitempty"`
-	Failure               *Failure         `json:"failure,omitempty"`
+	Target                plan.ProbeTarget `json:"target" jsonschema:"description=The probe target configuration that was tested"`
+	Attempt               int              `json:"attempt" jsonschema:"description=Attempt number for this target (starts at 1)"`
+	Timestamp             time.Time        `json:"timestamp" jsonschema:"description=Timestamp when this probe was executed (UTC)"`
+	LocalAddr             string           `json:"local_addr,omitempty" jsonschema:"description=Local socket address (IP:port) used for the connection"`
+	RemoteAddr            string           `json:"remote_addr,omitempty" jsonschema:"description=Remote socket address (IP:port) that was connected to"`
+	ResolvedIP            string           `json:"resolved_ip,omitempty" jsonschema:"description=IP address extracted from the remote address"`
+	BytesWritten          int64            `json:"bytes_written,omitempty" jsonschema:"description=Total bytes written during the TLS handshake"`
+	BytesRead             int64            `json:"bytes_read,omitempty" jsonschema:"description=Total bytes read during the TLS handshake"`
+	DialDuration          time.Duration    `json:"dial_duration_ms,omitempty" jsonschema:"description=Time taken to establish TCP connection in nanoseconds (despite _ms suffix)"`
+	HandshakeDuration     time.Duration    `json:"handshake_duration_ms,omitempty" jsonschema:"description=Time taken to complete TLS handshake in nanoseconds (despite _ms suffix)"`
+	TotalDuration         time.Duration    `json:"total_duration_ms,omitempty" jsonschema:"description=Total time from start to finish in nanoseconds (despite _ms suffix)"`
+	TLSVersion            string           `json:"tls_version,omitempty" jsonschema:"description=Negotiated TLS protocol version (e.g. TLS 1.3)"`
+	CipherSuite           string           `json:"cipher_suite,omitempty" jsonschema:"description=Negotiated TLS cipher suite name"`
+	NegotiatedProtocol    string           `json:"negotiated_protocol,omitempty" jsonschema:"description=ALPN protocol that was successfully negotiated"`
+	LeafSubject           string           `json:"leaf_subject,omitempty" jsonschema:"description=Subject DN of the server's leaf certificate"`
+	LeafIssuer            string           `json:"leaf_issuer,omitempty" jsonschema:"description=Issuer DN of the server's leaf certificate"`
+	LeafSANs              []string         `json:"leaf_sans,omitempty" jsonschema:"description=Subject Alternative Names from the server's leaf certificate (DNS names, IPs, URIs)"`
+	LeafFingerprint       string           `json:"leaf_fingerprint,omitempty" jsonschema:"description=SHA-256 fingerprint of the server's leaf certificate (uppercase hex)"`
+	CertificateChain      []string         `json:"certificate_chain,omitempty" jsonschema:"description=Ordered list of certificate fingerprints in the chain (leaf first)"`
+	ClientCertFingerprint string           `json:"client_cert_fingerprint,omitempty" jsonschema:"description=SHA-256 fingerprint of the client certificate used for mutual TLS (if any)"`
+	Failure               *Failure         `json:"failure,omitempty" jsonschema:"description=Failure details if the probe did not succeed"`
 }
 
 // Failure describes a classified probe error.
 type Failure struct {
-	Kind    string `json:"kind"`
-	Message string `json:"message"`
+	Kind    string `json:"kind" jsonschema:"description=Classification of the failure (e.g. timeout, alpn_mismatch, untrusted_cert, host_ca_unavailable)"`
+	Message string `json:"message" jsonschema:"description=Human-readable error message describing what went wrong"`
 }
 
 // NewEngine constructs an Engine with sensible defaults.

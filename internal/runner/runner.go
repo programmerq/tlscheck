@@ -42,11 +42,11 @@ type ClientCertificateCollector interface {
 
 // Execution captures the combination of the generated plan and the resulting probe outcomes.
 type Execution struct {
-	Arguments *config.Options            `json:"arguments,omitempty"`
-	Network   *discovery.NetworkInfo     `json:"network,omitempty"`
-	Plan      plan.Plan                  `json:"plan"`
-	Results   []probe.Result             `json:"results"`
-	Certs     map[string]*probe.CertInfo `json:"certs,omitempty"`
+	Arguments *config.Options            `json:"arguments,omitempty" jsonschema:"description=Parsed command-line arguments and runtime configuration used for this execution"`
+	Network   *discovery.NetworkInfo     `json:"network,omitempty" jsonschema:"description=Network configuration discovery results including proxy settings, routing table, and VPN detection"`
+	Plan      plan.Plan                  `json:"plan" jsonschema:"description=Generated probe execution plan with all target combinations to be tested"`
+	Results   []probe.Result             `json:"results" jsonschema:"description=Individual probe results for each target, containing connection details, certificates, and any failures"`
+	Certs     map[string]*probe.CertInfo `json:"certs,omitempty" jsonschema:"description=Map of all certificates encountered during probing, indexed by SHA-256 fingerprint (uppercase hex)"`
 }
 
 // Execute builds a probe plan using the supplied builder and executes it with the engine.
