@@ -15,111 +15,111 @@ import (
 
 // NetworkInfo captures network configuration including proxy, routing, and VPN details.
 type NetworkInfo struct {
-	ProxyConfig ProxyConfig `json:"proxy_config"`
-	Routes      RouteInfo   `json:"routes"`
-	VPN         VPNInfo     `json:"vpn"`
+	ProxyConfig ProxyConfig `json:"proxy_config" jsonschema:"description=Detected proxy configuration from environment variables, system settings, and PAC files"`
+	Routes      RouteInfo   `json:"routes" jsonschema:"description=System routing table and network interface information"`
+	VPN         VPNInfo     `json:"vpn" jsonschema:"description=VPN detection results including interfaces, applications, and routes"`
 }
 
 // ProxyConfig captures all proxy-related configuration.
 type ProxyConfig struct {
-	Environment   EnvironmentProxies `json:"environment"`
-	SystemProxy   *SystemProxy       `json:"system_proxy,omitempty"`
-	PACFile       *PACFileInfo       `json:"pac_file,omitempty"`
-	SOCKSProxy    *SOCKSProxyInfo    `json:"socks_proxy,omitempty"`
-	DetectionTime time.Time          `json:"detection_time"`
+	Environment   EnvironmentProxies `json:"environment" jsonschema:"description=Proxy settings from environment variables (HTTP_PROXY, HTTPS_PROXY, etc.)"`
+	SystemProxy   *SystemProxy       `json:"system_proxy,omitempty" jsonschema:"description=OS-level proxy settings from macOS Network Settings or Windows Registry"`
+	PACFile       *PACFileInfo       `json:"pac_file,omitempty" jsonschema:"description=Proxy Auto-Configuration (PAC) file URL and content"`
+	SOCKSProxy    *SOCKSProxyInfo    `json:"socks_proxy,omitempty" jsonschema:"description=SOCKS proxy configuration detected from environment"`
+	DetectionTime time.Time          `json:"detection_time" jsonschema:"description=Timestamp when proxy detection was performed (UTC)"`
 }
 
 // EnvironmentProxies captures proxy settings from environment variables.
 type EnvironmentProxies struct {
-	HTTPSProxy string   `json:"https_proxy,omitempty"`
-	HTTPProxy  string   `json:"http_proxy,omitempty"`
-	NoProxy    string   `json:"no_proxy,omitempty"`
-	AllProxy   string   `json:"all_proxy,omitempty"`
-	FTPProxy   string   `json:"ftp_proxy,omitempty"`
-	Parsed     []string `json:"parsed_hosts,omitempty"`
+	HTTPSProxy string   `json:"https_proxy,omitempty" jsonschema:"description=HTTPS proxy URL from HTTPS_PROXY or https_proxy environment variable"`
+	HTTPProxy  string   `json:"http_proxy,omitempty" jsonschema:"description=HTTP proxy URL from HTTP_PROXY or http_proxy environment variable"`
+	NoProxy    string   `json:"no_proxy,omitempty" jsonschema:"description=Comma-separated list of hosts to bypass proxy from NO_PROXY or no_proxy"`
+	AllProxy   string   `json:"all_proxy,omitempty" jsonschema:"description=Fallback proxy URL from ALL_PROXY or all_proxy (often used for SOCKS)"`
+	FTPProxy   string   `json:"ftp_proxy,omitempty" jsonschema:"description=FTP proxy URL from FTP_PROXY or ftp_proxy environment variable"`
+	Parsed     []string `json:"parsed_hosts,omitempty" jsonschema:"description=Parsed proxy host addresses extracted from proxy URLs"`
 }
 
 // SystemProxy captures OS-level proxy settings (primarily macOS/Windows).
 type SystemProxy struct {
-	Enabled     bool     `json:"enabled"`
-	HTTPProxy   string   `json:"http_proxy,omitempty"`
-	HTTPSProxy  string   `json:"https_proxy,omitempty"`
-	SOCKSProxy  string   `json:"socks_proxy,omitempty"`
-	FTPProxy    string   `json:"ftp_proxy,omitempty"`
-	ExcludeList []string `json:"exclude_list,omitempty"`
-	PACEnabled  bool     `json:"pac_enabled"`
-	PACURL      string   `json:"pac_url,omitempty"`
-	Source      string   `json:"source"` // "macOS Network Settings", "Windows Registry", etc.
+	Enabled     bool     `json:"enabled" jsonschema:"description=Whether system-level proxy is enabled"`
+	HTTPProxy   string   `json:"http_proxy,omitempty" jsonschema:"description=HTTP proxy address from system settings"`
+	HTTPSProxy  string   `json:"https_proxy,omitempty" jsonschema:"description=HTTPS proxy address from system settings"`
+	SOCKSProxy  string   `json:"socks_proxy,omitempty" jsonschema:"description=SOCKS proxy address from system settings"`
+	FTPProxy    string   `json:"ftp_proxy,omitempty" jsonschema:"description=FTP proxy address from system settings"`
+	ExcludeList []string `json:"exclude_list,omitempty" jsonschema:"description=List of domains or addresses to bypass proxy"`
+	PACEnabled  bool     `json:"pac_enabled" jsonschema:"description=Whether Proxy Auto-Configuration is enabled"`
+	PACURL      string   `json:"pac_url,omitempty" jsonschema:"description=URL of the PAC file if PAC is enabled"`
+	Source      string   `json:"source" jsonschema:"description=Source of the system proxy settings (e.g. macOS Network Settings, Windows Registry)"` // "macOS Network Settings", "Windows Registry", etc.
 }
 
 // PACFileInfo captures Proxy Auto-Configuration file details.
 type PACFileInfo struct {
-	URL       string `json:"url,omitempty"`
-	Content   string `json:"content,omitempty"`
-	Error     string `json:"error,omitempty"`
-	Retrieved bool   `json:"retrieved"`
+	URL       string `json:"url,omitempty" jsonschema:"description=URL where the PAC file was retrieved from"`
+	Content   string `json:"content,omitempty" jsonschema:"description=Full content of the PAC file (JavaScript)"`
+	Error     string `json:"error,omitempty" jsonschema:"description=Error message if PAC file could not be retrieved"`
+	Retrieved bool   `json:"retrieved" jsonschema:"description=Whether the PAC file was successfully retrieved"`
 }
 
 // SOCKSProxyInfo captures SOCKS proxy configuration.
 type SOCKSProxyInfo struct {
-	Version string `json:"version"` // "SOCKS4", "SOCKS5"
-	Address string `json:"address"`
-	Port    int    `json:"port"`
-	Source  string `json:"source"`
+	Version string `json:"version" jsonschema:"description=SOCKS protocol version (SOCKS4 or SOCKS5)"` // "SOCKS4", "SOCKS5"
+	Address string `json:"address" jsonschema:"description=SOCKS proxy server address (hostname or IP)"`
+	Port    int    `json:"port" jsonschema:"description=SOCKS proxy server port number"`
+	Source  string `json:"source" jsonschema:"description=Where this SOCKS proxy configuration was found (e.g. ALL_PROXY environment variable)"`
 }
 
 // RouteInfo captures routing table information.
 type RouteInfo struct {
-	Available  bool           `json:"available"`
-	Error      string         `json:"error,omitempty"`
-	DefaultGW  string         `json:"default_gateway,omitempty"`
-	Routes     []Route        `json:"routes,omitempty"`
-	Interfaces []NetInterface `json:"interfaces,omitempty"`
-	CapturedAt time.Time      `json:"captured_at,omitempty"`
+	Available  bool           `json:"available" jsonschema:"description=Whether routing table information was successfully captured"`
+	Error      string         `json:"error,omitempty" jsonschema:"description=Error message if route capture failed"`
+	DefaultGW  string         `json:"default_gateway,omitempty" jsonschema:"description=Default gateway IP address from the routing table"`
+	Routes     []Route        `json:"routes,omitempty" jsonschema:"description=List of routing table entries"`
+	Interfaces []NetInterface `json:"interfaces,omitempty" jsonschema:"description=List of network interfaces with their addresses"`
+	CapturedAt time.Time      `json:"captured_at,omitempty" jsonschema:"description=Timestamp when routing information was captured (UTC)"`
 }
 
 // Route represents a single routing table entry.
 type Route struct {
-	Destination string `json:"destination"`
-	Gateway     string `json:"gateway,omitempty"`
-	Netmask     string `json:"netmask,omitempty"`
-	Interface   string `json:"interface"`
-	Metric      int    `json:"metric,omitempty"`
-	Flags       string `json:"flags,omitempty"`
+	Destination string `json:"destination" jsonschema:"description=Destination network in CIDR notation or 'default' for default route"`
+	Gateway     string `json:"gateway,omitempty" jsonschema:"description=Gateway IP address for this route"`
+	Netmask     string `json:"netmask,omitempty" jsonschema:"description=Network mask for the destination (on platforms that use netmask instead of CIDR)"`
+	Interface   string `json:"interface" jsonschema:"description=Network interface name for this route (e.g. eth0, en0)"`
+	Metric      int    `json:"metric,omitempty" jsonschema:"description=Route metric (lower is preferred)"`
+	Flags       string `json:"flags,omitempty" jsonschema:"description=Route flags indicating properties like Up, Gateway, Host"`
 }
 
 // NetInterface represents a network interface.
 type NetInterface struct {
-	Name         string   `json:"name"`
-	HardwareAddr string   `json:"hardware_addr,omitempty"`
-	Addresses    []string `json:"addresses,omitempty"`
-	Flags        string   `json:"flags,omitempty"`
-	MTU          int      `json:"mtu,omitempty"`
+	Name         string   `json:"name" jsonschema:"description=Network interface name (e.g. eth0, en0, wlan0)"`
+	HardwareAddr string   `json:"hardware_addr,omitempty" jsonschema:"description=MAC address of the interface"`
+	Addresses    []string `json:"addresses,omitempty" jsonschema:"description=IP addresses assigned to this interface in CIDR notation"`
+	Flags        string   `json:"flags,omitempty" jsonschema:"description=Interface flags (e.g. up, broadcast, multicast)"`
+	MTU          int      `json:"mtu,omitempty" jsonschema:"description=Maximum Transmission Unit size in bytes"`
 }
 
 // VPNInfo captures VPN-related configuration and state.
 type VPNInfo struct {
-	Detected      bool           `json:"detected"`
-	Interfaces    []VPNInterface `json:"interfaces,omitempty"`
-	Applications  []VPNApp       `json:"applications,omitempty"`
-	Routes        []Route        `json:"routes,omitempty"`
-	DetectionTime time.Time      `json:"detection_time"`
+	Detected      bool           `json:"detected" jsonschema:"description=Whether any VPN connections were detected"`
+	Interfaces    []VPNInterface `json:"interfaces,omitempty" jsonschema:"description=VPN network interfaces found on the system"`
+	Applications  []VPNApp       `json:"applications,omitempty" jsonschema:"description=VPN applications and services detected as running"`
+	Routes        []Route        `json:"routes,omitempty" jsonschema:"description=Routing table entries associated with VPN interfaces"`
+	DetectionTime time.Time      `json:"detection_time" jsonschema:"description=Timestamp when VPN detection was performed (UTC)"`
 }
 
 // VPNInterface represents a detected VPN network interface.
 type VPNInterface struct {
-	Name      string   `json:"name"`
-	Type      string   `json:"type"` // "tun", "tap", "ppp", "utun", etc.
-	Addresses []string `json:"addresses,omitempty"`
-	Status    string   `json:"status"`
+	Name      string   `json:"name" jsonschema:"description=Interface name (e.g. tun0, utun1, ppp0)"`
+	Type      string   `json:"type" jsonschema:"description=VPN interface type (e.g. tun, tap, ppp, utun, wireguard)"` // "tun", "tap", "ppp", "utun", etc.
+	Addresses []string `json:"addresses,omitempty" jsonschema:"description=IP addresses assigned to this VPN interface"`
+	Status    string   `json:"status" jsonschema:"description=Interface status (e.g. up, down)"`
 }
 
 // VPNApp represents a detected VPN application or service.
 type VPNApp struct {
-	Name    string `json:"name"`
-	Type    string `json:"type"` // "OpenVPN", "WireGuard", "Cisco AnyConnect", etc.
-	Status  string `json:"status"`
-	Details string `json:"details,omitempty"`
+	Name    string `json:"name" jsonschema:"description=Name of the VPN application or service"`
+	Type    string `json:"type" jsonschema:"description=Type of VPN (e.g. OpenVPN, WireGuard, Cisco AnyConnect, GlobalProtect)"` // "OpenVPN", "WireGuard", "Cisco AnyConnect", etc.
+	Status  string `json:"status" jsonschema:"description=Application status (e.g. running, configured)"`
+	Details string `json:"details,omitempty" jsonschema:"description=Additional details about the VPN connection"`
 }
 
 // DiscoverNetwork gathers comprehensive network configuration information.

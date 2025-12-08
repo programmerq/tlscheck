@@ -23,6 +23,7 @@ LDFLAGS=-ldflags "-X github.com/programmerq/tlscheck/internal/version.Version=$(
 # Output directories
 DIST_DIR=dist
 BIN_DIR=bin
+SCHEMA_DIR=schemas
 
 .PHONY: all
 all: test build
@@ -35,6 +36,8 @@ help:
 	@echo "  make fmt                - Run gofmt on all source files"
 	@echo "  make clean              - Remove build artifacts"
 	@echo "  make deps               - Download dependencies"
+	@echo "  make schema             - Generate JSON schema"
+	@echo "  make schema-check       - Verify JSON schema is up-to-date"
 	@echo "  make release            - Build binaries for all platforms"
 	@echo "  make release-linux      - Build Linux binaries (amd64, arm64)"
 	@echo "  make release-darwin     - Build macOS binaries (amd64, arm64)"
@@ -64,6 +67,23 @@ clean:
 	rm -rf $(DIST_DIR)
 	rm -rf $(BIN_DIR)
 	rm -f coverage.txt
+
+.PHONY: schema
+schema:
+	@echo "Generating JSON schema..."
+	@$(GOCMD) run ./cmd/schema-gen $(SCHEMA_DIR)
+
+.PHONY: schema-check
+schema-check:
+	@echo "Verifying JSON schema is up-to-date..."
+	@$(GOCMD) run ./cmd/schema-gen $(SCHEMA_DIR).tmp
+	@if ! diff -q $(SCHEMA_DIR)/execution.json $(SCHEMA_DIR).tmp/execution.json > /dev/null 2>&1; then \
+		echo "ERROR: JSON schema is out of date. Run 'make schema' to update it."; \
+		rm -rf $(SCHEMA_DIR).tmp; \
+		exit 1; \
+	fi
+	@rm -rf $(SCHEMA_DIR).tmp
+	@echo "JSON schema is up-to-date."
 
 # Cross-platform build targets
 .PHONY: release

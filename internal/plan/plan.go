@@ -12,33 +12,33 @@ import (
 
 // Plan captures the probe blueprint derived from CLI inputs.
 type Plan struct {
-	GeneratedAt        time.Time        `json:"generated_at"`
-	Options            config.Options   `json:"options"`
-	VersionBand        string           `json:"version_band"`
-	Base16ClusterName  string           `json:"base16_cluster_name"`
-	DefaultUpgradePath []UpgradeAttempt `json:"default_upgrade_path"`
-	Targets            []ProbeTarget    `json:"targets"`
+	GeneratedAt        time.Time        `json:"generated_at" jsonschema:"description=Timestamp when this probe plan was generated (UTC)"`
+	Options            config.Options   `json:"options" jsonschema:"description=Configuration options that were used to generate this plan"`
+	VersionBand        string           `json:"version_band" jsonschema:"description=Teleport version category (e.g. v18+, v15-v17) used to determine upgrade sequence behavior"`
+	Base16ClusterName  string           `json:"base16_cluster_name" jsonschema:"description=Hexadecimal-encoded cluster name used in SNI for some Teleport services"`
+	DefaultUpgradePath []UpgradeAttempt `json:"default_upgrade_path" jsonschema:"description=Default HTTP upgrade header sequence to use for connection upgrade attempts"`
+	Targets            []ProbeTarget    `json:"targets" jsonschema:"description=List of all probe targets to execute, each representing a unique (service, port, SNI, ALPN) combination"`
 }
 
 // ProbeTarget represents a specific (port, SNI, ALPN) combination to execute.
 type ProbeTarget struct {
-	ServiceKey        string           `json:"service_key"`
-	DisplayName       string           `json:"display_name"`
-	Address           string           `json:"address"`
-	DNSResolvedIPs    []string         `json:"dns_resolved_ips,omitempty"`
-	OverrideIPs       []string         `json:"override_ips,omitempty"`
-	Port              int              `json:"port"`
-	PrimarySNI        string           `json:"primary_sni"`
-	AdditionalSNIs    []string         `json:"additional_snis,omitempty"`
-	ALPNs             []string         `json:"alpns"`
-	UpgradeSequence   []UpgradeAttempt `json:"upgrade_sequence"`
-	Trust             TrustStrategy    `json:"trust"`
-	InformationalOnly bool             `json:"informational_only,omitempty"`
-	Repeat            int              `json:"repeat"`
-	Notes             []string         `json:"notes,omitempty"`
-	UseClientCert     *bool            `json:"use_client_cert,omitempty"`
-	UseProxy          bool             `json:"use_proxy,omitempty"`
-	ProxyURL          string           `json:"proxy_url,omitempty"`
+	ServiceKey        string           `json:"service_key" jsonschema:"description=Identifier for the Teleport service being probed (e.g. proxy_web, proxy_ssh, kubernetes)"`
+	DisplayName       string           `json:"display_name" jsonschema:"description=Human-readable name for the service being probed"`
+	Address           string           `json:"address" jsonschema:"description=DNS name or IP address to connect to"`
+	DNSResolvedIPs    []string         `json:"dns_resolved_ips,omitempty" jsonschema:"description=IP addresses resolved from DNS for this target (in order returned by resolver)"`
+	OverrideIPs       []string         `json:"override_ips,omitempty" jsonschema:"description=User-specified IP addresses to use instead of DNS resolution"`
+	Port              int              `json:"port" jsonschema:"description=TCP port number to connect to"`
+	PrimarySNI        string           `json:"primary_sni" jsonschema:"description=Server Name Indication (SNI) value to use in the TLS handshake"`
+	AdditionalSNIs    []string         `json:"additional_snis,omitempty" jsonschema:"description=Alternative SNI values to try if primary fails"`
+	ALPNs             []string         `json:"alpns" jsonschema:"description=Application-Layer Protocol Negotiation (ALPN) protocols to request (e.g. h2, http/1.1, teleport-proxy-ssh)"`
+	UpgradeSequence   []UpgradeAttempt `json:"upgrade_sequence" jsonschema:"description=HTTP upgrade header sequence to use for this target"`
+	Trust             TrustStrategy    `json:"trust" jsonschema:"description=Certificate trust strategy: system (OS cert store) or host_ca (Teleport host CA bundle)"`
+	InformationalOnly bool             `json:"informational_only,omitempty" jsonschema:"description=When true, failures for this target are informational and not critical (used when TLS routing is disabled)"`
+	Repeat            int              `json:"repeat" jsonschema:"description=Number of times to probe this target"`
+	Notes             []string         `json:"notes,omitempty" jsonschema:"description=Human-readable notes about this probe target's purpose or expected behavior"`
+	UseClientCert     *bool            `json:"use_client_cert,omitempty" jsonschema:"description=Whether to use client certificate for mutual TLS authentication"`
+	UseProxy          bool             `json:"use_proxy,omitempty" jsonschema:"description=Whether to use HTTP/HTTPS proxy for this connection"`
+	ProxyURL          string           `json:"proxy_url,omitempty" jsonschema:"description=Proxy URL to use if use_proxy is true"`
 }
 
 // TrustStrategy describes which certificate authorities should be trusted for a probe target.
@@ -53,8 +53,8 @@ const (
 
 // UpgradeAttempt documents the sequence of Upgrade headers to send behind L7 load balancers.
 type UpgradeAttempt struct {
-	Token string `json:"token"`
-	Path  string `json:"path"`
+	Token string `json:"token" jsonschema:"description=Upgrade token to send in the Upgrade HTTP header (e.g. websocket, alpn)"`
+	Path  string `json:"path" jsonschema:"description=HTTP path to request for the upgrade attempt (e.g. /webapi/connectionupgrade)"`
 }
 
 const upgradeEndpoint = "/webapi/connectionupgrade"

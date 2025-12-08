@@ -11,48 +11,48 @@ import (
 
 // CertInfo contains expanded certificate metadata for JSON output.
 type CertInfo struct {
-	PEM               string         `json:"pem"`
-	Fingerprint       string         `json:"fingerprint"`
-	Subject           CertName       `json:"subject"`
-	Issuer            CertName       `json:"issuer"`
-	Validity          CertValidity   `json:"validity"`
-	SANs              CertSANs       `json:"sans"`
-	AuthorityKeyID    string         `json:"authority_key_id,omitempty"`
-	SubjectKeyID      string         `json:"subject_key_id,omitempty"`
-	IsCA              bool           `json:"is_ca"`
-	IssuerFingerprint string         `json:"issuer_fingerprint,omitempty"`
-	SerialNumber      string         `json:"serial_number,omitempty"`
-	SignatureAlgo     string         `json:"signature_algorithm,omitempty"`
-	PublicKeyAlgo     string         `json:"public_key_algorithm,omitempty"`
-	KeyUsage          []string       `json:"key_usage,omitempty"`
-	ExtKeyUsage       []string       `json:"ext_key_usage,omitempty"`
-	Source            CertSource     `json:"source,omitempty"`
-	TrustStatus       *CertTrustInfo `json:"trust_status,omitempty"`
+	PEM               string         `json:"pem" jsonschema:"description=Certificate in PEM-encoded format"`
+	Fingerprint       string         `json:"fingerprint" jsonschema:"description=SHA-256 fingerprint of the certificate (uppercase hex)"`
+	Subject           CertName       `json:"subject" jsonschema:"description=Subject distinguished name from the certificate"`
+	Issuer            CertName       `json:"issuer" jsonschema:"description=Issuer distinguished name from the certificate"`
+	Validity          CertValidity   `json:"validity" jsonschema:"description=Certificate validity period (notBefore and notAfter timestamps)"`
+	SANs              CertSANs       `json:"sans" jsonschema:"description=Subject Alternative Names from the certificate"`
+	AuthorityKeyID    string         `json:"authority_key_id,omitempty" jsonschema:"description=Authority Key Identifier extension (colon-separated hex bytes)"`
+	SubjectKeyID      string         `json:"subject_key_id,omitempty" jsonschema:"description=Subject Key Identifier extension (colon-separated hex bytes)"`
+	IsCA              bool           `json:"is_ca" jsonschema:"description=Whether this certificate is a Certificate Authority"`
+	IssuerFingerprint string         `json:"issuer_fingerprint,omitempty" jsonschema:"description=SHA-256 fingerprint of the issuer's certificate if present in the chain"`
+	SerialNumber      string         `json:"serial_number,omitempty" jsonschema:"description=Certificate serial number as a decimal string"`
+	SignatureAlgo     string         `json:"signature_algorithm,omitempty" jsonschema:"description=Signature algorithm used (e.g. SHA256-RSA, ECDSA-SHA256)"`
+	PublicKeyAlgo     string         `json:"public_key_algorithm,omitempty" jsonschema:"description=Public key algorithm (e.g. RSA, ECDSA)"`
+	KeyUsage          []string       `json:"key_usage,omitempty" jsonschema:"description=Key usage extensions (e.g. DigitalSignature, KeyEncipherment)"`
+	ExtKeyUsage       []string       `json:"ext_key_usage,omitempty" jsonschema:"description=Extended key usage extensions (e.g. ServerAuth, ClientAuth)"`
+	Source            CertSource     `json:"source,omitempty" jsonschema:"description=How this certificate was obtained (server, client, or reference)"`
+	TrustStatus       *CertTrustInfo `json:"trust_status,omitempty" jsonschema:"description=Trust and MITM detection information for this certificate"`
 }
 
 // CertName represents a certificate subject or issuer name.
 type CertName struct {
-	CommonName         string   `json:"common_name,omitempty"`
-	Organization       []string `json:"organization,omitempty"`
-	OrganizationalUnit []string `json:"organizational_unit,omitempty"`
-	Country            []string `json:"country,omitempty"`
-	Province           []string `json:"province,omitempty"`
-	Locality           []string `json:"locality,omitempty"`
-	SerialNumber       string   `json:"serial_number,omitempty"`
+	CommonName         string   `json:"common_name,omitempty" jsonschema:"description=Common Name (CN) from the distinguished name"`
+	Organization       []string `json:"organization,omitempty" jsonschema:"description=Organization (O) values from the distinguished name"`
+	OrganizationalUnit []string `json:"organizational_unit,omitempty" jsonschema:"description=Organizational Unit (OU) values from the distinguished name"`
+	Country            []string `json:"country,omitempty" jsonschema:"description=Country (C) values from the distinguished name"`
+	Province           []string `json:"province,omitempty" jsonschema:"description=Province/State (ST) values from the distinguished name"`
+	Locality           []string `json:"locality,omitempty" jsonschema:"description=Locality/City (L) values from the distinguished name"`
+	SerialNumber       string   `json:"serial_number,omitempty" jsonschema:"description=Serial number from the distinguished name (distinct from certificate serial number)"`
 }
 
 // CertValidity contains the certificate validity period.
 type CertValidity struct {
-	NotBefore string `json:"not_before"`
-	NotAfter  string `json:"not_after"`
+	NotBefore string `json:"not_before" jsonschema:"description=Timestamp when the certificate becomes valid (ISO 8601 format)"`
+	NotAfter  string `json:"not_after" jsonschema:"description=Timestamp when the certificate expires (ISO 8601 format)"`
 }
 
 // CertSANs contains the certificate Subject Alternative Names.
 type CertSANs struct {
-	DNS   []string `json:"dns,omitempty"`
-	IP    []string `json:"ip,omitempty"`
-	URI   []string `json:"uri,omitempty"`
-	Email []string `json:"email,omitempty"`
+	DNS   []string `json:"dns,omitempty" jsonschema:"description=DNS names from the Subject Alternative Name extension"`
+	IP    []string `json:"ip,omitempty" jsonschema:"description=IP addresses from the Subject Alternative Name extension"`
+	URI   []string `json:"uri,omitempty" jsonschema:"description=URIs from the Subject Alternative Name extension"`
+	Email []string `json:"email,omitempty" jsonschema:"description=Email addresses from the Subject Alternative Name extension"`
 }
 
 // CertSource indicates how the certificate was obtained.
@@ -69,10 +69,10 @@ const (
 
 // CertTrustInfo contains information about certificate trust status.
 type CertTrustInfo struct {
-	TrustedBy        []string `json:"trusted_by,omitempty"`
-	MITMSuspected    bool     `json:"mitm_suspected,omitempty"`
-	MITMReason       string   `json:"mitm_reason,omitempty"`
-	MatchesReference bool     `json:"matches_reference,omitempty"`
+	TrustedBy        []string `json:"trusted_by,omitempty" jsonschema:"description=List of known certificate authorities that could have issued this certificate"`
+	MITMSuspected    bool     `json:"mitm_suspected,omitempty" jsonschema:"description=Whether this certificate might be from a man-in-the-middle proxy"`
+	MITMReason       string   `json:"mitm_reason,omitempty" jsonschema:"description=Explanation of why MITM is suspected"`
+	MatchesReference bool     `json:"matches_reference,omitempty" jsonschema:"description=Whether this certificate matches a known reference certificate"`
 }
 
 // ParseCertInfo extracts detailed certificate information from a parsed x509 certificate.
