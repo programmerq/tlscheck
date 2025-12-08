@@ -18,6 +18,7 @@ type Options struct {
 	Repeat            int             `json:"repeat" jsonschema:"description=Number of probe attempts to execute per target combination"`
 	ServiceFilter     []string        `json:"service_filter,omitempty" jsonschema:"description=Optional list of service keys to probe (e.g. proxy_web, proxy_ssh). When empty, all services are probed"`
 	IPAddresses       []string        `json:"ip_addresses,omitempty" jsonschema:"description=Optional list of specific IP addresses to probe instead of DNS resolution"`
+	OutputFormat      string          `json:"output_format,omitempty" jsonschema:"description=Output format: json (default) or html"`
 	Proxy             ProxySettings   `json:"proxy" jsonschema:"description=HTTP/HTTPS proxy configuration detected from environment variables"`
 	ProfileSource     *ProfileInfo    `json:"profile_source,omitempty" jsonschema:"description=Information about the tsh profile used to populate default values"`
 	ClientCert        *ClientCertInfo `json:"-"` // Client cert info moved to top-level client_certs
@@ -101,6 +102,7 @@ func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 	fs.IntVar(&opts.Repeat, "repeat", 1, "Attempts per SNI/ALPN/IP combination (default 1)")
 	fs.StringVar(&services, "services", "all", servicesHelp)
 	fs.StringVar(&ipAddresses, "ip-addresses", "", "Comma-separated list of IP addresses to use instead of DNS resolution")
+	fs.StringVar(&opts.OutputFormat, "output-format", "json", "Output format: json or html")
 	fs.BoolVar(&showVersion, "version", false, "Print tlscheck version and exit")
 	fs.BoolVar(&showVersion, "v", false, "Print tlscheck version and exit")
 
@@ -111,6 +113,7 @@ func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 		fmt.Fprintf(fs.Output(), "  --repeat int\n\tAttempts per SNI/ALPN/IP combination (default 1)\n")
 		fmt.Fprintf(fs.Output(), "  --services string\n\t%s\n", servicesHelp)
 		fmt.Fprintf(fs.Output(), "  --ip-addresses string\n\tComma-separated list of IP addresses to use instead of DNS resolution\n")
+		fmt.Fprintf(fs.Output(), "  --output-format string\n\tOutput format: json (default) or html\n")
 		fmt.Fprintf(fs.Output(), "  -v, --version\n\tPrint tlscheck version and exit\n")
 	}
 	usage = fs.Usage
@@ -121,6 +124,12 @@ func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 
 	if opts.Repeat <= 0 {
 		return Options{}, false, fmt.Errorf("repeat must be positive (got %d)", opts.Repeat)
+	}
+
+	// Validate output format
+	opts.OutputFormat = strings.ToLower(strings.TrimSpace(opts.OutputFormat))
+	if opts.OutputFormat != "json" && opts.OutputFormat != "html" {
+		return Options{}, false, fmt.Errorf("output-format must be 'json' or 'html' (got %q)", opts.OutputFormat)
 	}
 
 	services = strings.TrimSpace(services)

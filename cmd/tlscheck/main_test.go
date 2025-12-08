@@ -165,3 +165,72 @@ func generateHostCAPEM(t *testing.T) []byte {
 	block := &pem.Block{Type: "CERTIFICATE", Bytes: der}
 	return pem.EncodeToMemory(block)
 }
+
+func TestRunWithHTMLOutput(t *testing.T) {
+	t.Parallel()
+
+	expectedPlan := plan.Plan{
+		Targets: []plan.ProbeTarget{{
+			ServiceKey: "proxy_web",
+			Address:    "teleport.example.com",
+			Port:       443,
+			Repeat:     1,
+		}},
+	}
+	expectedResults := []probe.Result{{
+		Target:             expectedPlan.Targets[0],
+		Attempt:            1,
+		NegotiatedProtocol: "h2",
+	}}
+
+	engine := &stubEngine{results: expectedResults}
+
+	deps := dependencies{
+		parseArgs: func(args []string, keys []string) (config.Options, bool, error) {
+			return config.Options{
+				PublicAddr:   "teleport.example.com",
+				OutputFormat: "html",
+			}, false, nil
+		},
+		resolveRuntime: func(ctx context.Context, opts config.Options) (config.Options, error) {
+			opts.ClusterName = "example"
+			opts.TeleportVersion = "15.3.7"
+			opts.Repeat = 1
+			opts.WebProxyPort = 443
+			opts.TLSRoutingEnabled = true
+			opts.OutputFormat = "html"
+			return opts, nil
+		},
+		planBuilder: runner.PlanBuilderFunc(func(opts config.Options) (plan.Plan, error) {
+			planCopy := expectedPlan
+			planCopy.Options = opts
+			return planCopy, nil
+		}),
+		newEngine: func() runner.Engine { return engine },
+		systemCertPool: func() (*x509.CertPool, error) {
+			return x509.NewCertPool(), nil
+		},
+	}
+
+	var stdout stdbytes.Buffer
+	var stderr stdbytes.Buffer
+
+	exitCode := run(context.Background(), []string{"--proxy-server", "teleport.example.com", "--output-format", "html"}, &stdout, &stderr, deps)
+	if exitCode != 0 {
+		t.Fatalf("run returned non-zero exit code: %d (stderr: %s)", exitCode, stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("unexpected stderr output: %s", stderr.String())
+	}
+
+	html := stdout.String()
+	if !stdbytes.Contains([]byte(html), []byte("<!DOCTYPE html>")) {
+		t.Error("HTML output missing DOCTYPE declaration")
+	}
+	if !stdbytes.Contains([]byte(html), []byte("TLS Check Results")) {
+		t.Error("HTML output missing title")
+	}
+	if !stdbytes.Contains([]byte(html), []byte("example")) {
+		t.Error("HTML output missing cluster name")
+	}
+}
