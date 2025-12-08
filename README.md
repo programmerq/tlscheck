@@ -66,6 +66,27 @@ The resulting JSON document contains several top-level keys:
   allows easy lookup by fingerprint, and provides detailed metadata for frontend rendering without
   requiring PEM decoding.
 
+## JSON Schema
+
+The output format is fully documented by a JSON schema located in `schemas/execution.json`. The schema
+can be used for:
+
+* **Validation**: Programmatically verify that `tlscheck` output matches the expected structure
+* **IDE Integration**: Get autocomplete and validation in editors that support JSON Schema
+* **Documentation**: Serve as the canonical reference for the output format
+
+To generate or validate the schema:
+
+```shell
+# Generate the schema from Go structs
+make schema
+
+# Verify the schema is up-to-date
+make schema-check
+```
+
+See [schemas/README.md](schemas/README.md) for details on using and validating against the schema.
+
 Flags:
 
 * `--proxy-server` – Teleport proxy public DNS name. When omitted, the CLI reads

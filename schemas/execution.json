@@ -1,0 +1,1063 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/programmerq/tlscheck/schemas/execution.json",
+  "properties": {
+    "arguments": {
+      "properties": {
+        "public_addr": {
+          "type": "string"
+        },
+        "cluster_name": {
+          "type": "string"
+        },
+        "teleport_version": {
+          "type": "string"
+        },
+        "web_proxy_port": {
+          "type": "integer"
+        },
+        "tls_routing_enabled": {
+          "type": "boolean"
+        },
+        "repeat": {
+          "type": "integer"
+        },
+        "service_filter": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ip_addresses": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "proxy": {
+          "properties": {
+            "https_proxy": {
+              "type": "string"
+            },
+            "http_proxy": {
+              "type": "string"
+            },
+            "no_proxy": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "type": "object"
+        },
+        "profile_source": {
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "username": {
+              "type": "string"
+            },
+            "client_cert_path": {
+              "type": "string"
+            },
+            "client_key_path": {
+              "type": "string"
+            },
+            "client_cert_found": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "name",
+            "path",
+            "client_cert_found"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "public_addr",
+        "cluster_name",
+        "teleport_version",
+        "tls_routing_enabled",
+        "repeat",
+        "proxy"
+      ]
+    },
+    "network": {
+      "properties": {
+        "proxy_config": {
+          "properties": {
+            "environment": {
+              "properties": {
+                "https_proxy": {
+                  "type": "string"
+                },
+                "http_proxy": {
+                  "type": "string"
+                },
+                "no_proxy": {
+                  "type": "string"
+                },
+                "all_proxy": {
+                  "type": "string"
+                },
+                "ftp_proxy": {
+                  "type": "string"
+                },
+                "parsed_hosts": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object"
+            },
+            "system_proxy": {
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "http_proxy": {
+                  "type": "string"
+                },
+                "https_proxy": {
+                  "type": "string"
+                },
+                "socks_proxy": {
+                  "type": "string"
+                },
+                "ftp_proxy": {
+                  "type": "string"
+                },
+                "exclude_list": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "pac_enabled": {
+                  "type": "boolean"
+                },
+                "pac_url": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "enabled",
+                "pac_enabled",
+                "source"
+              ]
+            },
+            "pac_file": {
+              "properties": {
+                "url": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "error": {
+                  "type": "string"
+                },
+                "retrieved": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "retrieved"
+              ]
+            },
+            "socks_proxy": {
+              "properties": {
+                "version": {
+                  "type": "string"
+                },
+                "address": {
+                  "type": "string"
+                },
+                "port": {
+                  "type": "integer"
+                },
+                "source": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "version",
+                "address",
+                "port",
+                "source"
+              ]
+            },
+            "detection_time": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "environment",
+            "detection_time"
+          ]
+        },
+        "routes": {
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "error": {
+              "type": "string"
+            },
+            "default_gateway": {
+              "type": "string"
+            },
+            "routes": {
+              "items": {
+                "properties": {
+                  "destination": {
+                    "type": "string"
+                  },
+                  "gateway": {
+                    "type": "string"
+                  },
+                  "netmask": {
+                    "type": "string"
+                  },
+                  "interface": {
+                    "type": "string"
+                  },
+                  "metric": {
+                    "type": "integer"
+                  },
+                  "flags": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "destination",
+                  "interface"
+                ]
+              },
+              "type": "array"
+            },
+            "interfaces": {
+              "items": {
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "hardware_addr": {
+                    "type": "string"
+                  },
+                  "addresses": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "flags": {
+                    "type": "string"
+                  },
+                  "mtu": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "name"
+                ]
+              },
+              "type": "array"
+            },
+            "captured_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "available"
+          ]
+        },
+        "vpn": {
+          "properties": {
+            "detected": {
+              "type": "boolean"
+            },
+            "interfaces": {
+              "items": {
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "addresses": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "status": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "name",
+                  "type",
+                  "status"
+                ]
+              },
+              "type": "array"
+            },
+            "applications": {
+              "items": {
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "details": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "name",
+                  "type",
+                  "status"
+                ]
+              },
+              "type": "array"
+            },
+            "routes": {
+              "items": {
+                "properties": {
+                  "destination": {
+                    "type": "string"
+                  },
+                  "gateway": {
+                    "type": "string"
+                  },
+                  "netmask": {
+                    "type": "string"
+                  },
+                  "interface": {
+                    "type": "string"
+                  },
+                  "metric": {
+                    "type": "integer"
+                  },
+                  "flags": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "destination",
+                  "interface"
+                ]
+              },
+              "type": "array"
+            },
+            "detection_time": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "detected",
+            "detection_time"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "proxy_config",
+        "routes",
+        "vpn"
+      ]
+    },
+    "plan": {
+      "properties": {
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "options": {
+          "properties": {
+            "public_addr": {
+              "type": "string"
+            },
+            "cluster_name": {
+              "type": "string"
+            },
+            "teleport_version": {
+              "type": "string"
+            },
+            "web_proxy_port": {
+              "type": "integer"
+            },
+            "tls_routing_enabled": {
+              "type": "boolean"
+            },
+            "repeat": {
+              "type": "integer"
+            },
+            "service_filter": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "ip_addresses": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "proxy": {
+              "properties": {
+                "https_proxy": {
+                  "type": "string"
+                },
+                "http_proxy": {
+                  "type": "string"
+                },
+                "no_proxy": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object"
+            },
+            "profile_source": {
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "username": {
+                  "type": "string"
+                },
+                "client_cert_path": {
+                  "type": "string"
+                },
+                "client_key_path": {
+                  "type": "string"
+                },
+                "client_cert_found": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "name",
+                "path",
+                "client_cert_found"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "public_addr",
+            "cluster_name",
+            "teleport_version",
+            "tls_routing_enabled",
+            "repeat",
+            "proxy"
+          ]
+        },
+        "version_band": {
+          "type": "string"
+        },
+        "base16_cluster_name": {
+          "type": "string"
+        },
+        "default_upgrade_path": {
+          "items": {
+            "properties": {
+              "token": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "token",
+              "path"
+            ]
+          },
+          "type": "array"
+        },
+        "targets": {
+          "items": {
+            "properties": {
+              "service_key": {
+                "type": "string"
+              },
+              "display_name": {
+                "type": "string"
+              },
+              "address": {
+                "type": "string"
+              },
+              "dns_resolved_ips": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "override_ips": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "port": {
+                "type": "integer"
+              },
+              "primary_sni": {
+                "type": "string"
+              },
+              "additional_snis": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "alpns": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "upgrade_sequence": {
+                "items": {
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "token",
+                    "path"
+                  ]
+                },
+                "type": "array"
+              },
+              "trust": {
+                "type": "string"
+              },
+              "informational_only": {
+                "type": "boolean"
+              },
+              "repeat": {
+                "type": "integer"
+              },
+              "notes": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "use_client_cert": {
+                "type": "boolean"
+              },
+              "use_proxy": {
+                "type": "boolean"
+              },
+              "proxy_url": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "service_key",
+              "display_name",
+              "address",
+              "port",
+              "primary_sni",
+              "alpns",
+              "upgrade_sequence",
+              "trust",
+              "repeat"
+            ]
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "generated_at",
+        "options",
+        "version_band",
+        "base16_cluster_name",
+        "default_upgrade_path",
+        "targets"
+      ]
+    },
+    "results": {
+      "items": {
+        "properties": {
+          "target": {
+            "properties": {
+              "service_key": {
+                "type": "string"
+              },
+              "display_name": {
+                "type": "string"
+              },
+              "address": {
+                "type": "string"
+              },
+              "dns_resolved_ips": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "override_ips": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "port": {
+                "type": "integer"
+              },
+              "primary_sni": {
+                "type": "string"
+              },
+              "additional_snis": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "alpns": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "upgrade_sequence": {
+                "items": {
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "token",
+                    "path"
+                  ]
+                },
+                "type": "array"
+              },
+              "trust": {
+                "type": "string"
+              },
+              "informational_only": {
+                "type": "boolean"
+              },
+              "repeat": {
+                "type": "integer"
+              },
+              "notes": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "use_client_cert": {
+                "type": "boolean"
+              },
+              "use_proxy": {
+                "type": "boolean"
+              },
+              "proxy_url": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "service_key",
+              "display_name",
+              "address",
+              "port",
+              "primary_sni",
+              "alpns",
+              "upgrade_sequence",
+              "trust",
+              "repeat"
+            ]
+          },
+          "attempt": {
+            "type": "integer"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "local_addr": {
+            "type": "string"
+          },
+          "remote_addr": {
+            "type": "string"
+          },
+          "resolved_ip": {
+            "type": "string"
+          },
+          "bytes_written": {
+            "type": "integer"
+          },
+          "bytes_read": {
+            "type": "integer"
+          },
+          "dial_duration_ms": {
+            "type": "integer"
+          },
+          "handshake_duration_ms": {
+            "type": "integer"
+          },
+          "total_duration_ms": {
+            "type": "integer"
+          },
+          "tls_version": {
+            "type": "string"
+          },
+          "cipher_suite": {
+            "type": "string"
+          },
+          "negotiated_protocol": {
+            "type": "string"
+          },
+          "leaf_subject": {
+            "type": "string"
+          },
+          "leaf_issuer": {
+            "type": "string"
+          },
+          "leaf_sans": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "leaf_fingerprint": {
+            "type": "string"
+          },
+          "certificate_chain": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "client_cert_fingerprint": {
+            "type": "string"
+          },
+          "failure": {
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "message"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "target",
+          "attempt",
+          "timestamp"
+        ]
+      },
+      "type": "array"
+    },
+    "certs": {
+      "additionalProperties": {
+        "properties": {
+          "pem": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "subject": {
+            "properties": {
+              "common_name": {
+                "type": "string"
+              },
+              "organization": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "organizational_unit": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "country": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "province": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "locality": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "serial_number": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object"
+          },
+          "issuer": {
+            "properties": {
+              "common_name": {
+                "type": "string"
+              },
+              "organization": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "organizational_unit": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "country": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "province": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "locality": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "serial_number": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object"
+          },
+          "validity": {
+            "properties": {
+              "not_before": {
+                "type": "string"
+              },
+              "not_after": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "not_before",
+              "not_after"
+            ]
+          },
+          "sans": {
+            "properties": {
+              "dns": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "ip": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "uri": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "email": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object"
+          },
+          "authority_key_id": {
+            "type": "string"
+          },
+          "subject_key_id": {
+            "type": "string"
+          },
+          "is_ca": {
+            "type": "boolean"
+          },
+          "issuer_fingerprint": {
+            "type": "string"
+          },
+          "serial_number": {
+            "type": "string"
+          },
+          "signature_algorithm": {
+            "type": "string"
+          },
+          "public_key_algorithm": {
+            "type": "string"
+          },
+          "key_usage": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "ext_key_usage": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "source": {
+            "type": "string"
+          },
+          "trust_status": {
+            "properties": {
+              "trusted_by": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "mitm_suspected": {
+                "type": "boolean"
+              },
+              "mitm_reason": {
+                "type": "string"
+              },
+              "matches_reference": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pem",
+          "fingerprint",
+          "subject",
+          "issuer",
+          "validity",
+          "sans",
+          "is_ca"
+        ]
+      },
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "plan",
+    "results"
+  ],
+  "title": "TLS Check Execution Result",
+  "description": "The complete output from a tlscheck execution, including arguments, network discovery, probe plan, results, and certificate details."
+}
