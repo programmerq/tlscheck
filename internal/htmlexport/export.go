@@ -1,6 +1,7 @@
 package htmlexport
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -17,15 +18,21 @@ func Write(w io.Writer, exec runner.Execution) error {
 		return fmt.Errorf("failed to marshal execution data: %w", err)
 	}
 
+	// Escape the JSON data for safe embedding in JavaScript
+	var escapedJSON bytes.Buffer
+	template.JSEscape(&escapedJSON, jsonData)
+
 	tmpl, err := template.New("tlscheck").Parse(htmlTemplate)
 	if err != nil {
 		return fmt.Errorf("failed to parse HTML template: %w", err)
 	}
 
 	data := struct {
-		JSONData string
+		JSONData       string
+		RawJSONData    string
 	}{
-		JSONData: string(jsonData),
+		JSONData:    escapedJSON.String(),
+		RawJSONData: string(jsonData),
 	}
 
 	if err := tmpl.Execute(w, data); err != nil {
@@ -289,8 +296,8 @@ const htmlTemplate = `<!DOCTYPE html>
     </div>
 
     <script>
-        // Embedded JSON data
-        const tlsCheckData = {{.JSONData}};
+        // Embedded JSON data - properly escaped for JavaScript context
+        const tlsCheckData = JSON.parse("{{.JSONData}}");
 
         function renderSummary() {
             const args = tlsCheckData.arguments || {};
@@ -461,8 +468,8 @@ const htmlTemplate = `<!DOCTYPE html>
             
             app.innerHTML = content;
 
-            // Display raw JSON
-            document.getElementById('raw-json').textContent = JSON.stringify(tlsCheckData, null, 2);
+            // Display raw JSON - using pre-formatted JSON from server
+            document.getElementById('raw-json').textContent = {{.RawJSONData | printf "%q"}};
 
             // Setup collapsible sections
             const collapsibles = document.querySelectorAll('.collapsible');
