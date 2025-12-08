@@ -18,10 +18,6 @@ func Write(w io.Writer, exec runner.Execution) error {
 		return fmt.Errorf("failed to marshal execution data: %w", err)
 	}
 
-	// Escape the JSON data for safe embedding in JavaScript
-	var escapedJSON bytes.Buffer
-	template.JSEscape(&escapedJSON, jsonData)
-
 	// Escape for HTML display in <pre> tag - use HTMLEscape for text content
 	var htmlEscapedJSON bytes.Buffer
 	template.HTMLEscape(&htmlEscapedJSON, jsonData)
@@ -32,10 +28,10 @@ func Write(w io.Writer, exec runner.Execution) error {
 	}
 
 	data := struct {
-		JSONData           string
+		JSONData           template.JS
 		RawJSONDataEscaped string
 	}{
-		JSONData:           escapedJSON.String(),
+		JSONData:           template.JS(jsonData), // Use template.JS to mark as safe JavaScript
 		RawJSONDataEscaped: htmlEscapedJSON.String(),
 	}
 
@@ -300,8 +296,8 @@ const htmlTemplate = `<!DOCTYPE html>
     </div>
 
     <script>
-        // Embedded JSON data - properly escaped for JavaScript context
-        const tlsCheckData = JSON.parse("{{.JSONData}}");
+        // Embedded JSON data - directly embedded as JavaScript object literal
+        const tlsCheckData = {{.JSONData}};
 
         function renderSummary() {
             const args = tlsCheckData.arguments || {};

@@ -77,6 +77,15 @@ func TestWriteGeneratesValidHTML(t *testing.T) {
 	if !strings.Contains(html, "const tlsCheckData") {
 		t.Error("HTML output missing embedded JSON data")
 	}
+
+	// Verify JSON is embedded directly as object literal, not with JSON.parse()
+	if strings.Contains(html, "JSON.parse(") {
+		t.Error("HTML should not use JSON.parse() - JSON should be embedded directly")
+	}
+	if !strings.Contains(html, "const tlsCheckData = {") {
+		t.Error("JSON should be embedded as object literal")
+	}
+
 	if !strings.Contains(html, "test-cluster") {
 		t.Error("HTML output missing cluster name from data")
 	}
