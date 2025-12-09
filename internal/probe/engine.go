@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/programmerq/tlscheck/internal/log"
 	"github.com/programmerq/tlscheck/internal/plan"
 )
 
@@ -168,6 +169,7 @@ func (e *Engine) Run(ctx context.Context, p plan.Plan) ([]Result, error) {
 		return nil, fmt.Errorf("probe engine requires a dialer")
 	}
 
+	log.Printf("starting probe execution with %d targets", len(p.Targets))
 	results := make([]Result, 0)
 	for _, target := range p.Targets {
 		// Determine which IPs to probe
@@ -180,6 +182,9 @@ func (e *Engine) Run(ctx context.Context, p plan.Plan) ([]Result, error) {
 				ips = []string{target.Address}
 			}
 		}
+
+		log.Printf("probing service %s (%s) on %s:%d with %d IP(s): %v",
+			target.ServiceKey, target.DisplayName, target.Address, target.Port, len(ips), ips)
 
 		// Probe each IP
 		for _, ip := range ips {
@@ -203,6 +208,7 @@ func (e *Engine) Run(ctx context.Context, p plan.Plan) ([]Result, error) {
 	// Sort results: group by service_key, then by address, then by attempt
 	sortResults(results)
 
+	log.Printf("probe execution complete: %d results", len(results))
 	return results, nil
 }
 
@@ -223,14 +229,20 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 		Timestamp: startTime.UTC(),
 	}
 
+	log.Printf("[%s] attempt %d: dialing %s:%d (SNI: %s, ALPN: %v, proxy: %v)",
+		target.ServiceKey, attempt, target.Address, target.Port,
+		target.PrimarySNI, target.ALPNs, target.UseProxy)
+
 	dialCtx, cancel := context.WithTimeout(ctx, e.Timeout)
 	defer cancel()
 
 	// Select the appropriate dialer based on whether proxy is requested
 	dialer := e.Dialer
 	if target.UseProxy && target.ProxyURL != "" {
+		log.Printf("[%s] using proxy: %s", target.ServiceKey, target.ProxyURL)
 		proxyDialer, err := NewProxyDialer(target.ProxyURL, e.Timeout)
 		if err != nil {
+			log.Printf("[%s] proxy config error: %v", target.ServiceKey, err)
 			res.TotalDuration = time.Since(startTime)
 			res.Failure = &Failure{Kind: "proxy_config_error", Message: fmt.Sprintf("invalid proxy configuration: %v", err)}
 			return res
@@ -240,15 +252,19 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 
 	addr := net.JoinHostPort(target.Address, fmt.Sprintf("%d", target.Port))
 	dialStart := time.Now()
+	log.Printf("[%s] dialing TCP connection to %s", target.ServiceKey, addr)
 	conn, err := dialer.DialContext(dialCtx, "tcp", addr)
 	dialEnd := time.Now()
 	res.DialDuration = dialEnd.Sub(dialStart)
 	if err != nil {
+		log.Printf("[%s] TCP dial failed after %v: %v", target.ServiceKey, res.DialDuration, err)
 		res.TotalDuration = time.Since(startTime)
 		res.Failure = &Failure{Kind: classifyDialError(err), Message: err.Error()}
 		return res
 	}
 	defer conn.Close()
+	log.Printf("[%s] TCP connection established in %v (local: %s, remote: %s)",
+		target.ServiceKey, res.DialDuration, conn.LocalAddr(), conn.RemoteAddr())
 	res.RemoteAddr = conn.RemoteAddr().String()
 	res.LocalAddr = conn.LocalAddr().String()
 
@@ -281,7 +297,9 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 	defer tlsConn.Close()
 
 	handshakeStart := time.Now()
+	log.Printf("[%s] starting TLS handshake", target.ServiceKey)
 	if err := tlsConn.HandshakeContext(dialCtx); err != nil {
+		log.Printf("[%s] TLS handshake failed after %v: %v", target.ServiceKey, time.Since(handshakeStart), err)
 		res.HandshakeDuration = time.Since(handshakeStart)
 		res.TotalDuration = time.Since(startTime)
 		res.BytesWritten = trackedConn.BytesWritten()
@@ -297,9 +315,13 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 		return res
 	}
 	res.HandshakeDuration = time.Since(handshakeStart)
+	log.Printf("[%s] TLS handshake succeeded in %v", target.ServiceKey, res.HandshakeDuration)
 
 	state := tlsConn.ConnectionState()
 	res.NegotiatedProtocol = state.NegotiatedProtocol
+	log.Printf("[%s] negotiated protocol: %s, TLS version: %s, cipher: %s",
+		target.ServiceKey, state.NegotiatedProtocol,
+		tlsVersionString(state.Version), tls.CipherSuiteName(state.CipherSuite))
 
 	e.captureCertificateDetails(&res, state)
 	e.captureTLSDetails(&res, state)
@@ -326,6 +348,7 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 		if errors.Is(err, errHostCATrustUnavailable) {
 			kind = "host_ca_unavailable"
 		}
+		log.Printf("[%s] certificate verification failed: %v", target.ServiceKey, err)
 		res.TotalDuration = time.Since(startTime)
 		res.BytesWritten = trackedConn.BytesWritten()
 		res.BytesRead = trackedConn.BytesRead()
@@ -336,6 +359,8 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 	res.TotalDuration = time.Since(startTime)
 	res.BytesWritten = trackedConn.BytesWritten()
 	res.BytesRead = trackedConn.BytesRead()
+	log.Printf("[%s] probe succeeded in %v (bytes read: %d, written: %d)",
+		target.ServiceKey, res.TotalDuration, res.BytesRead, res.BytesWritten)
 	return res
 }
 

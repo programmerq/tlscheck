@@ -12,6 +12,7 @@ import (
 
 	"github.com/programmerq/tlscheck/internal/config"
 	"github.com/programmerq/tlscheck/internal/htmlexport"
+	"github.com/programmerq/tlscheck/internal/log"
 	"github.com/programmerq/tlscheck/internal/plan"
 	"github.com/programmerq/tlscheck/internal/probe"
 	"github.com/programmerq/tlscheck/internal/runner"
@@ -73,6 +74,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, deps depe
 	if showVersion {
 		fmt.Fprintln(stdout, version.Version)
 		return 0
+	}
+
+	// Enable verbose logging if requested
+	if opts.Verbose {
+		log.SetEnabled(true)
+		log.Printf("verbose logging enabled")
 	}
 
 	resolved, err := deps.resolveRuntime(ctx, opts)
