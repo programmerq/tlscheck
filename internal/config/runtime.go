@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/programmerq/tlscheck/internal/discovery"
+	"github.com/programmerq/tlscheck/internal/log"
 )
 
 // ErrProxyServerRequired indicates that no proxy address could be discovered automatically.
@@ -20,10 +21,13 @@ func ResolveRuntime(ctx context.Context, opts Options) (Options, error) {
 	resolved := opts
 
 	home := discovery.DefaultTeleportHome()
+	log.Printf("resolving runtime configuration from Teleport home: %s", home)
 	profile, profileErr := discovery.LoadActiveProfile(home)
 	if profileErr == nil {
+		log.Printf("loaded profile: %s (user: %s)", profile.Name, profile.Username)
 		if resolved.PublicAddr == "" {
 			resolved.PublicAddr = profile.PublicAddr
+			log.Printf("using proxy address from profile: %s", resolved.PublicAddr)
 		}
 
 		// Calculate expected client cert paths
@@ -41,6 +45,7 @@ func ResolveRuntime(ctx context.Context, opts Options) (Options, error) {
 
 		// Try to load the client certificate for this profile
 		if clientCert := discovery.LoadClientCert(home, profile.Name, profile.Username); clientCert != nil {
+			log.Printf("loaded client certificate: %s", clientCert.Fingerprint)
 			resolved.ProfileSource.ClientCertFound = true
 			resolved.ClientCertPEM = clientCert.CertPEM
 			resolved.ClientKeyPEM = clientCert.KeyPEM
@@ -135,6 +140,9 @@ func ResolveRuntime(ctx context.Context, opts Options) (Options, error) {
 	if resolved.WebProxyPort == 0 {
 		resolved.WebProxyPort = 443
 	}
+	log.Printf("resolved proxy: %s:%d (cluster: %s, version: %s, tls_routing: %v)",
+		resolved.PublicAddr, resolved.WebProxyPort, resolved.ClusterName,
+		resolved.TeleportVersion, resolved.TLSRoutingEnabled)
 
 	var hostCAEndpoints []string
 	if info.Proxy.WebProxyPublicAddr != "" {
@@ -164,14 +172,17 @@ func ResolveRuntime(ctx context.Context, opts Options) (Options, error) {
 		}
 		tried[endpoint] = struct{}{}
 
+		log.Printf("fetching host CA bundle from %s", endpoint)
 		bundle, fetchErr = discovery.FetchHostCAs(ctx, endpoint, discovery.ProxySettings{
 			HTTPSProxy: resolved.Proxy.HTTPSProxy,
 			HTTPProxy:  resolved.Proxy.HTTPProxy,
 		})
 		if fetchErr == nil {
+			log.Printf("successfully fetched host CA bundle from %s (%d bytes)", endpoint, len(bundle))
 			resolved.HostCAPEM = bundle
 			break
 		}
+		log.Printf("failed to fetch host CA from %s: %v", endpoint, fetchErr)
 	}
 
 	if len(resolved.HostCAPEM) == 0 {

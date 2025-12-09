@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/programmerq/tlscheck/internal/log"
 )
 
 // ProxySettings mirrors the subset of proxy configuration required for HTTP discovery.
@@ -68,14 +70,24 @@ func FetchClusterInfo(ctx context.Context, publicAddr string, proxy ProxySetting
 		return PingInfo{}, err
 	}
 
+	log.Printf("fetching cluster info from %s", pingURL)
+	if proxy.HTTPSProxy != "" || proxy.HTTPProxy != "" {
+		log.Printf("using proxy: https_proxy=%s http_proxy=%s",
+			log.SanitizeURL(proxy.HTTPSProxy), log.SanitizeURL(proxy.HTTPProxy))
+	}
+
 	// First try with TLS verification enabled
+	log.Printf("attempting secure TLS connection to %s", pingURL)
 	info, secureErr := fetchClusterInfoWithTLS(ctx, pingURL, proxy, false)
 	if secureErr == nil {
 		// Success with verification
+		log.Printf("successfully fetched cluster info with TLS verification (cluster: %s, version: %s)",
+			info.ClusterName, info.ServerVersion)
 		info.TLSVerificationSucceeded = true
 		return info, nil
 	}
 
+	log.Printf("TLS verification failed: %v", secureErr)
 	// Check if it's a certificate verification error
 	if !isCertVerificationError(secureErr) {
 		// Not a cert error, return the original error
@@ -83,6 +95,7 @@ func FetchClusterInfo(ctx context.Context, publicAddr string, proxy ProxySetting
 	}
 
 	// Retry with InsecureSkipVerify
+	log.Printf("retrying with InsecureSkipVerify due to certificate verification error")
 	info, insecureErr := fetchClusterInfoWithTLS(ctx, pingURL, proxy, true)
 	if insecureErr != nil {
 		// Both attempts failed. Return the insecure error because if both fail,

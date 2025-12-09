@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/programmerq/tlscheck/internal/config"
+	"github.com/programmerq/tlscheck/internal/log"
 )
 
 // Plan captures the probe blueprint derived from CLI inputs.
@@ -104,6 +105,7 @@ func Build(opts config.Options) (Plan, error) {
 	}
 
 	// Resolve DNS for all targets before proxy duplication
+	log.Printf("resolving DNS for %d targets", len(plan.Targets))
 	for i := range plan.Targets {
 		resolveDNSForTarget(&plan.Targets[i])
 	}
@@ -111,6 +113,7 @@ func Build(opts config.Options) (Plan, error) {
 	// If a proxy is configured, duplicate all targets to test both with and without proxy
 	proxyURL := determineProxyURL(opts.Proxy)
 	if proxyURL != "" {
+		log.Printf("proxy configured: %s - duplicating targets for proxy and direct connections", log.SanitizeURL(proxyURL))
 		originalTargets := plan.Targets
 		plan.Targets = make([]ProbeTarget, 0, len(originalTargets)*2)
 
@@ -590,12 +593,19 @@ func resolveDNSForTarget(target *ProbeTarget) {
 
 	// Skip DNS resolution if we have override IPs
 	if len(target.OverrideIPs) > 0 {
+		log.Printf("DNS resolution skipped for %s (using override IPs: %v)", target.Address, target.OverrideIPs)
 		return
 	}
 
 	// Try to resolve the address
+	log.Printf("resolving DNS for %s", target.Address)
 	resolved, err := net.LookupIP(target.Address)
 	if err != nil || len(resolved) == 0 {
+		if err != nil {
+			log.Printf("DNS resolution failed for %s: %v", target.Address, err)
+		} else {
+			log.Printf("DNS resolution returned no IPs for %s", target.Address)
+		}
 		return
 	}
 
@@ -605,4 +615,5 @@ func resolveDNSForTarget(target *ProbeTarget) {
 		dnsIPs = append(dnsIPs, ip.String())
 	}
 	target.DNSResolvedIPs = dnsIPs
+	log.Printf("resolved %s to %d IP(s): %v", target.Address, len(dnsIPs), dnsIPs)
 }

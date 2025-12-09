@@ -46,6 +46,10 @@
           "type": "string",
           "description": "Output format: json (default) or html"
         },
+        "verbose": {
+          "type": "boolean",
+          "description": "Enable verbose logging to stderr for debugging"
+        },
         "proxy": {
           "properties": {
             "https_proxy": {
@@ -556,6 +560,10 @@
             "output_format": {
               "type": "string",
               "description": "Output format: json (default) or html"
+            },
+            "verbose": {
+              "type": "boolean",
+              "description": "Enable verbose logging to stderr for debugging"
             },
             "proxy": {
               "properties": {
