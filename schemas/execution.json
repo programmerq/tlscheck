@@ -42,6 +42,10 @@
           "type": "array",
           "description": "Optional list of specific IP addresses to probe instead of DNS resolution"
         },
+        "output_format": {
+          "type": "string",
+          "description": "Output format: json (default) or html"
+        },
         "proxy": {
           "properties": {
             "https_proxy": {
@@ -548,6 +552,10 @@
               },
               "type": "array",
               "description": "Optional list of specific IP addresses to probe instead of DNS resolution"
+            },
+            "output_format": {
+              "type": "string",
+              "description": "Output format: json (default) or html"
             },
             "proxy": {
               "properties": {

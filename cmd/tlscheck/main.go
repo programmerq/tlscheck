@@ -11,6 +11,7 @@ import (
 	"os"
 
 	"github.com/programmerq/tlscheck/internal/config"
+	"github.com/programmerq/tlscheck/internal/htmlexport"
 	"github.com/programmerq/tlscheck/internal/plan"
 	"github.com/programmerq/tlscheck/internal/probe"
 	"github.com/programmerq/tlscheck/internal/runner"
@@ -119,12 +120,24 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, deps depe
 		return 1
 	}
 
-	encoder := json.NewEncoder(stdout)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(exec); err != nil {
-		fmt.Fprintf(stderr, "failed to render results: %v\n", err)
-		return 1
+	// Output based on format
+	if resolved.OutputFormat == config.OutputFormatHTML {
+		if err := renderHTML(stdout, exec); err != nil {
+			fmt.Fprintf(stderr, "failed to render HTML: %v\n", err)
+			return 1
+		}
+	} else {
+		encoder := json.NewEncoder(stdout)
+		encoder.SetIndent("", "  ")
+		if err := encoder.Encode(exec); err != nil {
+			fmt.Fprintf(stderr, "failed to render results: %v\n", err)
+			return 1
+		}
 	}
 
 	return 0
+}
+
+func renderHTML(w io.Writer, exec runner.Execution) error {
+	return htmlexport.Write(w, exec)
 }
