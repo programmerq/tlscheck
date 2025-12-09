@@ -321,11 +321,60 @@ const htmlTemplate = `<!DOCTYPE html>
             box-shadow: 0 0 10px rgba(255, 193, 7, 0.5);
         }
 
+        .cert-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
         .cert-header {
             font-weight: 600;
             font-size: 1.1em;
             margin-bottom: 10px;
             color: #2c3e50;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .cert-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .btn-small {
+            padding: 4px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+            background: #3498db;
+            color: white;
+            transition: background 0.2s;
+        }
+
+        .btn-small:hover {
+            background: #2980b9;
+        }
+
+        .cert-raw {
+            margin-top: 10px;
+            display: none;
+        }
+
+        .cert-raw.show {
+            display: block;
+        }
+
+        .cert-raw pre {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 0.8em;
+            max-height: 300px;
         }
 
         .cert-link {
@@ -371,6 +420,22 @@ const htmlTemplate = `<!DOCTYPE html>
         .btn-secondary:hover {
             background: #7f8c8d;
         }
+
+        .copy-feedback {
+            display: inline-block;
+            margin-left: 10px;
+            padding: 4px 12px;
+            background: #27ae60;
+            color: white;
+            border-radius: 4px;
+            font-size: 0.9em;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .copy-feedback.show {
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
@@ -381,6 +446,7 @@ const htmlTemplate = `<!DOCTYPE html>
         <div class="button-group">
             <button class="btn btn-primary" onclick="downloadJSON()">Download JSON</button>
             <button class="btn btn-secondary" onclick="copyJSON()">Copy to Clipboard</button>
+            <span id="copy-feedback" class="copy-feedback">Copied!</span>
         </div>
         <button class="collapsible">Show/Hide Raw JSON</button>
         <div class="content">
@@ -542,17 +608,27 @@ const htmlTemplate = `<!DOCTYPE html>
             }
 
             let html = '<h2>Certificates</h2>';
+            html += '<div class="cert-grid">';
             
             certEntries.forEach(([fingerprint, cert]) => {
                 html += ` + "`" + `<div class="cert-card" id="cert-${fingerprint}">` + "`" + `;
                 html += '<div class="cert-header">';
                 
                 // Display common name or "Unknown Certificate"
+                html += '<span>';
                 if (cert.subject && cert.subject.common_name) {
                     html += escapeHtml(cert.subject.common_name);
                 } else {
                     html += 'Unknown Certificate';
                 }
+                html += '</span>';
+                
+                // Add action buttons
+                html += '<div class="cert-actions">';
+                html += ` + "`" + `<button class="btn-small" onclick="toggleRawCert('${fingerprint}')">Show Raw</button>` + "`" + `;
+                html += ` + "`" + `<button class="btn-small" onclick="copyCert('${fingerprint}')">Copy</button>` + "`" + `;
+                html += '</div>';
+                
                 html += '</div>';
                 
                 html += '<div class="metadata">';
@@ -612,9 +688,16 @@ const htmlTemplate = `<!DOCTYPE html>
                 }
                 
                 html += '</div>';
+                
+                // Raw certificate data (hidden by default)
+                html += ` + "`" + `<div class="cert-raw" id="cert-raw-${fingerprint}">` + "`" + `;
+                html += '<pre>' + escapeHtml(JSON.stringify(cert, null, 2)) + '</pre>';
+                html += '</div>';
+                
                 html += '</div>';
             });
 
+            html += '</div>';
             return html;
         }
 
@@ -683,7 +766,7 @@ const htmlTemplate = `<!DOCTYPE html>
         function downloadJSON() {
             const args = tlsCheckData.arguments || {};
             const clusterName = args.cluster_name || 'tlscheck';
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
             const filename = ` + "`" + `${clusterName}-${timestamp}.json` + "`" + `;
             
             const jsonStr = JSON.stringify(tlsCheckData, null, 2);
@@ -704,7 +787,7 @@ const htmlTemplate = `<!DOCTYPE html>
             
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(jsonStr).then(() => {
-                    alert('JSON copied to clipboard!');
+                    showCopyFeedback();
                 }).catch(err => {
                     console.error('Failed to copy:', err);
                     fallbackCopy(jsonStr);
@@ -723,11 +806,57 @@ const htmlTemplate = `<!DOCTYPE html>
             textarea.select();
             try {
                 document.execCommand('copy');
-                alert('JSON copied to clipboard!');
+                showCopyFeedback();
             } catch (err) {
                 alert('Failed to copy JSON. Please copy manually from the raw JSON section.');
             }
             document.body.removeChild(textarea);
+        }
+
+        function showCopyFeedback() {
+            const feedback = document.getElementById('copy-feedback');
+            feedback.classList.add('show');
+            setTimeout(() => {
+                feedback.classList.remove('show');
+            }, 2000);
+        }
+
+        function toggleRawCert(fingerprint) {
+            const rawElement = document.getElementById(` + "`" + `cert-raw-${fingerprint}` + "`" + `);
+            const button = event.target;
+            
+            if (rawElement.classList.contains('show')) {
+                rawElement.classList.remove('show');
+                button.textContent = 'Show Raw';
+            } else {
+                rawElement.classList.add('show');
+                button.textContent = 'Hide Raw';
+            }
+        }
+
+        function copyCert(fingerprint) {
+            const certs = tlsCheckData.certs || {};
+            const cert = certs[fingerprint];
+            
+            if (!cert) {
+                return;
+            }
+            
+            const certStr = JSON.stringify(cert, null, 2);
+            
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(certStr).then(() => {
+                    // Show temporary feedback on the button
+                    const button = event.target;
+                    const originalText = button.textContent;
+                    button.textContent = 'Copied!';
+                    setTimeout(() => {
+                        button.textContent = originalText;
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Failed to copy:', err);
+                });
+            }
         }
 
         // Initialize the app
