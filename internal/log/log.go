@@ -3,6 +3,7 @@ package log
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"sync"
 	"time"
@@ -57,4 +58,25 @@ func Println(args ...interface{}) {
 		timestamp := time.Now().Format("2006-01-02 15:04:05.000")
 		fmt.Fprintf(globalLogger.output, "[%s] %s\n", timestamp, fmt.Sprint(args...))
 	}
+}
+
+// SanitizeURL removes credentials from a URL string for safe logging.
+// If the URL cannot be parsed, it returns "[invalid URL]".
+func SanitizeURL(rawURL string) string {
+	if rawURL == "" {
+		return ""
+	}
+
+	// Try to parse as a URL
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "[invalid URL]"
+	}
+
+	// If there's user info, redact it
+	if u.User != nil {
+		u.User = url.User("[redacted]")
+	}
+
+	return u.String()
 }

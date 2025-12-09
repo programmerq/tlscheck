@@ -239,7 +239,7 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 	// Select the appropriate dialer based on whether proxy is requested
 	dialer := e.Dialer
 	if target.UseProxy && target.ProxyURL != "" {
-		log.Printf("[%s] using proxy: %s", target.ServiceKey, target.ProxyURL)
+		log.Printf("[%s] using proxy: %s", target.ServiceKey, log.SanitizeURL(target.ProxyURL))
 		proxyDialer, err := NewProxyDialer(target.ProxyURL, e.Timeout)
 		if err != nil {
 			log.Printf("[%s] proxy config error: %v", target.ServiceKey, err)

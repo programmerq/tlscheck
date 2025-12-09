@@ -72,7 +72,8 @@ func FetchClusterInfo(ctx context.Context, publicAddr string, proxy ProxySetting
 
 	log.Printf("fetching cluster info from %s", pingURL)
 	if proxy.HTTPSProxy != "" || proxy.HTTPProxy != "" {
-		log.Printf("using proxy: https_proxy=%s http_proxy=%s", proxy.HTTPSProxy, proxy.HTTPProxy)
+		log.Printf("using proxy: https_proxy=%s http_proxy=%s",
+			log.SanitizeURL(proxy.HTTPSProxy), log.SanitizeURL(proxy.HTTPProxy))
 	}
 
 	// First try with TLS verification enabled

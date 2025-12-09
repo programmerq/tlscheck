@@ -113,7 +113,7 @@ func Build(opts config.Options) (Plan, error) {
 	// If a proxy is configured, duplicate all targets to test both with and without proxy
 	proxyURL := determineProxyURL(opts.Proxy)
 	if proxyURL != "" {
-		log.Printf("proxy configured: %s - duplicating targets for proxy and direct connections", proxyURL)
+		log.Printf("proxy configured: %s - duplicating targets for proxy and direct connections", log.SanitizeURL(proxyURL))
 		originalTargets := plan.Targets
 		plan.Targets = make([]ProbeTarget, 0, len(originalTargets)*2)
 

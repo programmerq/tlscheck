@@ -92,3 +92,51 @@ func TestConcurrentLogging(t *testing.T) {
 		t.Error("expected some output from concurrent logging")
 	}
 }
+
+func TestSanitizeURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "URL without credentials",
+			input:    "http://proxy.example.com:8080",
+			expected: "http://proxy.example.com:8080",
+		},
+		{
+			name:     "URL with username only",
+			input:    "http://user@proxy.example.com:8080",
+			expected: "http://%5Bredacted%5D@proxy.example.com:8080",
+		},
+		{
+			name:     "URL with username and password",
+			input:    "http://user:password@proxy.example.com:8080",
+			expected: "http://%5Bredacted%5D@proxy.example.com:8080",
+		},
+		{
+			name:     "HTTPS URL with credentials",
+			input:    "https://admin:secret123@proxy.example.com:443",
+			expected: "https://%5Bredacted%5D@proxy.example.com:443",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "invalid URL",
+			input:    "not a valid url ://",
+			expected: "[invalid URL]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := SanitizeURL(tt.input)
+			if result != tt.expected {
+				t.Errorf("SanitizeURL(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
