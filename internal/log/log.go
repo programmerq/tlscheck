@@ -33,6 +33,9 @@ func SetEnabled(enabled bool) {
 func SetOutput(w io.Writer) {
 	globalLogger.mu.Lock()
 	defer globalLogger.mu.Unlock()
+	if w == nil {
+		w = io.Discard
+	}
 	globalLogger.output = w
 }
 

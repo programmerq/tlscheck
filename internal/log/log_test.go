@@ -2,6 +2,7 @@ package log
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 )
@@ -9,12 +10,14 @@ import (
 func TestLoggingDisabledByDefault(t *testing.T) {
 	var buf bytes.Buffer
 	SetOutput(&buf)
-	defer SetOutput(nil)
+	defer func() {
+		SetOutput(os.Stderr)
+	}()
 
 	// Logging should be disabled by default
 	SetEnabled(false)
 	Printf("test message")
-	
+
 	if buf.Len() > 0 {
 		t.Errorf("expected no output when logging is disabled, got: %s", buf.String())
 	}
@@ -23,18 +26,20 @@ func TestLoggingDisabledByDefault(t *testing.T) {
 func TestLoggingWhenEnabled(t *testing.T) {
 	var buf bytes.Buffer
 	SetOutput(&buf)
-	defer SetOutput(nil)
+	defer func() {
+		SetEnabled(false)
+		SetOutput(os.Stderr)
+	}()
 
 	SetEnabled(true)
-	defer SetEnabled(false)
 
 	Printf("test message %s", "arg")
-	
+
 	output := buf.String()
 	if !strings.Contains(output, "test message arg") {
 		t.Errorf("expected output to contain 'test message arg', got: %s", output)
 	}
-	
+
 	// Should have timestamp
 	if !strings.Contains(output, "[") || !strings.Contains(output, "]") {
 		t.Errorf("expected output to have timestamp, got: %s", output)
@@ -44,13 +49,15 @@ func TestLoggingWhenEnabled(t *testing.T) {
 func TestPrintln(t *testing.T) {
 	var buf bytes.Buffer
 	SetOutput(&buf)
-	defer SetOutput(nil)
+	defer func() {
+		SetEnabled(false)
+		SetOutput(os.Stderr)
+	}()
 
 	SetEnabled(true)
-	defer SetEnabled(false)
 
 	Println("test message")
-	
+
 	output := buf.String()
 	if !strings.Contains(output, "test message") {
 		t.Errorf("expected output to contain 'test message', got: %s", output)
@@ -60,10 +67,12 @@ func TestPrintln(t *testing.T) {
 func TestConcurrentLogging(t *testing.T) {
 	var buf bytes.Buffer
 	SetOutput(&buf)
-	defer SetOutput(nil)
+	defer func() {
+		SetEnabled(false)
+		SetOutput(os.Stderr)
+	}()
 
 	SetEnabled(true)
-	defer SetEnabled(false)
 
 	// Test that concurrent logging doesn't cause data races
 	done := make(chan bool)
