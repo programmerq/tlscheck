@@ -24,8 +24,8 @@ type NetworkInfo struct {
 // SystemInfo captures basic system information.
 type SystemInfo struct {
 	Hostname     string    `json:"hostname" jsonschema:"description=System hostname"`
-	OS           string    `json:"os" jsonschema:"description=Operating system (e.g. linux, darwin, windows)"`
-	Architecture string    `json:"architecture" jsonschema:"description=CPU architecture (e.g. amd64, arm64)"`
+	OS           string    `json:"os" jsonschema:"description=Operating system name such as linux darwin or windows"`
+	Architecture string    `json:"architecture" jsonschema:"description=CPU architecture such as amd64 or arm64"`
 	CapturedAt   time.Time `json:"captured_at" jsonschema:"description=Timestamp when system information was captured (UTC)"`
 }
 

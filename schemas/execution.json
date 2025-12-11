@@ -128,11 +128,11 @@
             },
             "os": {
               "type": "string",
-              "description": "Operating system (e.g. linux"
+              "description": "Operating system name such as linux darwin or windows"
             },
             "architecture": {
               "type": "string",
-              "description": "CPU architecture (e.g. amd64"
+              "description": "CPU architecture such as amd64 or arm64"
             },
             "captured_at": {
               "type": "string",
