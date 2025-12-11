@@ -122,9 +122,9 @@ type Result struct {
 	ResolvedIP            string           `json:"resolved_ip,omitempty" jsonschema:"description=IP address extracted from the remote address"`
 	BytesWritten          int64            `json:"bytes_written,omitempty" jsonschema:"description=Total bytes written during the TLS handshake"`
 	BytesRead             int64            `json:"bytes_read,omitempty" jsonschema:"description=Total bytes read during the TLS handshake"`
-	DialDuration          time.Duration    `json:"dial_duration_ms,omitempty" jsonschema:"description=Time taken to establish TCP connection in nanoseconds (despite _ms suffix)"`
-	HandshakeDuration     time.Duration    `json:"handshake_duration_ms,omitempty" jsonschema:"description=Time taken to complete TLS handshake in nanoseconds (despite _ms suffix)"`
-	TotalDuration         time.Duration    `json:"total_duration_ms,omitempty" jsonschema:"description=Total time from start to finish in nanoseconds (despite _ms suffix)"`
+	DialDuration          time.Duration    `json:"dial_duration_ns,omitempty" jsonschema:"description=Time taken to establish TCP connection in nanoseconds"`
+	HandshakeDuration     time.Duration    `json:"handshake_duration_ns,omitempty" jsonschema:"description=Time taken to complete TLS handshake in nanoseconds"`
+	TotalDuration         time.Duration    `json:"total_duration_ns,omitempty" jsonschema:"description=Total time from start to finish in nanoseconds"`
 	TLSVersion            string           `json:"tls_version,omitempty" jsonschema:"description=Negotiated TLS protocol version (e.g. TLS 1.3)"`
 	CipherSuite           string           `json:"cipher_suite,omitempty" jsonschema:"description=Negotiated TLS cipher suite name"`
 	NegotiatedProtocol    string           `json:"negotiated_protocol,omitempty" jsonschema:"description=ALPN protocol that was successfully negotiated"`
