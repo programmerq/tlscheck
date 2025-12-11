@@ -120,6 +120,36 @@
     },
     "network": {
       "properties": {
+        "system": {
+          "properties": {
+            "hostname": {
+              "type": "string",
+              "description": "System hostname"
+            },
+            "os": {
+              "type": "string",
+              "description": "Operating system (e.g. linux"
+            },
+            "architecture": {
+              "type": "string",
+              "description": "CPU architecture (e.g. amd64"
+            },
+            "captured_at": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Timestamp when system information was captured (UTC)"
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "hostname",
+            "os",
+            "architecture",
+            "captured_at"
+          ],
+          "description": "System information including hostname"
+        },
         "proxy_config": {
           "properties": {
             "environment": {
@@ -504,6 +534,7 @@
       "additionalProperties": false,
       "type": "object",
       "required": [
+        "system",
         "proxy_config",
         "routes",
         "vpn"

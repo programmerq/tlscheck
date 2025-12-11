@@ -15,9 +15,18 @@ import (
 
 // NetworkInfo captures network configuration including proxy, routing, and VPN details.
 type NetworkInfo struct {
+	System      SystemInfo  `json:"system" jsonschema:"description=System information including hostname, OS, and architecture"`
 	ProxyConfig ProxyConfig `json:"proxy_config" jsonschema:"description=Detected proxy configuration from environment variables, system settings, and PAC files"`
 	Routes      RouteInfo   `json:"routes" jsonschema:"description=System routing table and network interface information"`
 	VPN         VPNInfo     `json:"vpn" jsonschema:"description=VPN detection results including interfaces, applications, and routes"`
+}
+
+// SystemInfo captures basic system information.
+type SystemInfo struct {
+	Hostname     string    `json:"hostname" jsonschema:"description=System hostname"`
+	OS           string    `json:"os" jsonschema:"description=Operating system (e.g. linux, darwin, windows)"`
+	Architecture string    `json:"architecture" jsonschema:"description=CPU architecture (e.g. amd64, arm64)"`
+	CapturedAt   time.Time `json:"captured_at" jsonschema:"description=Timestamp when system information was captured (UTC)"`
 }
 
 // ProxyConfig captures all proxy-related configuration.
@@ -125,11 +134,28 @@ type VPNApp struct {
 // DiscoverNetwork gathers comprehensive network configuration information.
 func DiscoverNetwork(ctx context.Context) NetworkInfo {
 	info := NetworkInfo{
+		System:      discoverSystemInfo(),
 		ProxyConfig: discoverProxyConfig(ctx),
 		Routes:      discoverRoutes(ctx),
 		VPN:         discoverVPN(ctx),
 	}
 	return info
+}
+
+// discoverSystemInfo collects basic system information.
+func discoverSystemInfo() SystemInfo {
+	hostname, _ := os.Hostname()
+	// If hostname cannot be determined, use "unknown"
+	if hostname == "" {
+		hostname = "unknown"
+	}
+
+	return SystemInfo{
+		Hostname:     hostname,
+		OS:           runtime.GOOS,
+		Architecture: runtime.GOARCH,
+		CapturedAt:   time.Now().UTC(),
+	}
 }
 
 // discoverProxyConfig detects all proxy configuration sources.
