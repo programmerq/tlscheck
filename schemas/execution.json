@@ -128,7 +128,7 @@
             },
             "os": {
               "type": "string",
-              "description": "Operating system name such as linux darwin or windows"
+              "description": "Operating system name such as linux"
             },
             "architecture": {
               "type": "string",
