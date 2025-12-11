@@ -467,6 +467,9 @@ const htmlTemplate = `<!DOCTYPE html>
             html += '<div class="metadata">';
             html += createMetadataItem('Hostname', system.hostname || 'N/A');
             html += createMetadataItem('Operating System', system.os || 'N/A');
+            if (system.os_version) {
+                html += createMetadataItem('OS Version', system.os_version);
+            }
             html += createMetadataItem('Architecture', system.architecture || 'N/A');
             if (system.captured_at) {
                 html += createMetadataItem('Captured At', new Date(system.captured_at).toLocaleString());

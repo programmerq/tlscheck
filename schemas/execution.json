@@ -130,6 +130,10 @@
               "type": "string",
               "description": "Operating system name such as linux"
             },
+            "os_version": {
+              "type": "string",
+              "description": "Operating system version or distribution details when available"
+            },
             "architecture": {
               "type": "string",
               "description": "CPU architecture such as amd64 or arm64"
