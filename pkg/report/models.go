@@ -1,3 +1,13 @@
+// Package report defines canonical types for tlscheck envelope persistence.
+//
+// This package is intentionally dependency-free to ensure stability and ease of integration
+// with various persistence backends. It provides:
+//   - Envelope, Report, and Cert structs representing the data model
+//   - Helper functions for marshaling, unmarshaling, and validation
+//   - Timestamp normalization to ensure consistent UTC timestamps
+//
+// The Envelope schema (version "tlscheck.v1") is designed to be stable and forward-compatible.
+// Collectors should validate incoming envelopes using ValidateEnvelope before persistence.
 package report
 
 import (

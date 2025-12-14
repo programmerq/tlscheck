@@ -1,3 +1,28 @@
+// Package mongo provides a lightweight MongoDB-backed persistence layer for tlscheck reports.
+//
+// The MongoStore manages two collections:
+//   - reports: stores report documents with searchable fields (timestamp, target, cert_fingerprints)
+//     plus the raw envelope JSON for future flexibility. An index on timestamp enables efficient
+//     time-based queries.
+//   - certs: stores certificate documents with a unique index on fingerprint. Certificates are
+//     upserted atomically to maintain first_seen, last_seen, and seen_count tracking across
+//     multiple concurrent reporters.
+//
+// Usage:
+//
+//	store, err := mongo.NewMongoStore(ctx, "mongodb://localhost:27017", "tlscheck")
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	defer store.Close(ctx)
+//
+//	// Save a report
+//	err = store.SaveReport(ctx, report, rawJSON)
+//
+//	// Upsert certificates
+//	for _, cert := range certs {
+//	    store.UpsertCert(ctx, cert)
+//	}
 package mongo
 
 import (

@@ -1,3 +1,21 @@
+// Package main provides a simple HTTP server for collecting tlscheck envelopes.
+//
+// The collector accepts POST /upload requests containing Envelope JSON (schema version tlscheck.v1).
+// It validates the envelope and persists it either to MongoDB (if -mongo-uri is set) or to disk.
+//
+// Usage:
+//
+//	# Disk-based mode (writes JSON files to ./data)
+//	http-collector -listen 127.0.0.1:8080 -data-dir ./data
+//
+//	# MongoDB mode
+//	http-collector -listen 0.0.0.0:8080 -mongo-uri mongodb://localhost:27017 -mongo-db tlscheck
+//
+// The MongoDB store creates:
+//   - reports collection with an index on timestamp
+//   - certs collection with a unique index on fingerprint
+//
+// Certs are upserted atomically to track first_seen, last_seen, and seen_count.
 package main
 
 import (
