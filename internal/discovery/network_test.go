@@ -670,6 +670,11 @@ func TestMaskToCIDR(t *testing.T) {
 			mask:     "invalid",
 			expected: 0,
 		},
+		{
+			name:     "invalid netmask with non-contiguous bits",
+			mask:     "255.240.255.0",
+			expected: 0,
+		},
 	}
 
 	for _, tt := range tests {

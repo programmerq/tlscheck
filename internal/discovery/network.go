@@ -709,16 +709,12 @@ func discoverLinuxRoutes(ctx context.Context, info RouteInfo) RouteInfo {
 		} else {
 			// Try native /proc/net/route as last resort
 			routes, err := readProcNetRoute()
-			if err == nil && len(routes) > 0 {
+			if err == nil {
 				info.Available = true
 				info.Routes = routes
 			} else {
 				info.Available = false
-				if err != nil {
-					info.Error = fmt.Sprintf("failed to capture routes: %v", err)
-				} else {
-					info.Error = "failed to capture routes: no methods available"
-				}
+				info.Error = fmt.Sprintf("failed to capture routes: %v", err)
 				return info
 			}
 		}
@@ -887,6 +883,7 @@ func maskToCIDR(mask string) int {
 	}
 
 	var bits int
+	seenZero := false
 	for _, part := range parts {
 		octet, err := strconv.Atoi(part)
 		if err != nil {
@@ -895,11 +892,13 @@ func maskToCIDR(mask string) int {
 		// Count leading ones in the octet
 		for b := 7; b >= 0; b-- {
 			if (octet & (1 << b)) != 0 {
+				if seenZero {
+					// Invalid netmask: one bit after a zero bit
+					return 0
+				}
 				bits++
 			} else {
-				// Once we hit a zero, all remaining bits should be zero for a valid netmask
-				// If not, this isn't a valid CIDR netmask
-				return bits
+				seenZero = true
 			}
 		}
 	}
