@@ -100,13 +100,13 @@ func (h *collectorHandler) handleUpload(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Read the request body
+	defer r.Body.Close()
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Error reading request body: %v", err)
 		http.Error(w, "Failed to read request body", http.StatusBadRequest)
 		return
 	}
-	defer r.Body.Close()
 
 	// Unmarshal and validate the envelope
 	envelope, err := report.UnmarshalEnvelope(body)
