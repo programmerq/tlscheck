@@ -827,9 +827,8 @@ func readProcNetRoute() ([]Route, error) {
 				cidr := maskToCIDR(mask)
 				if cidr > 0 && cidr < 32 {
 					route.Destination = fmt.Sprintf("%s/%d", dest, cidr)
-				} else if cidr == 32 {
-					route.Destination = dest
 				} else {
+					// cidr == 0 (default/any) or cidr == 32 (host route)
 					route.Destination = dest
 				}
 			}
@@ -840,8 +839,8 @@ func readProcNetRoute() ([]Route, error) {
 			route.Gateway = gw
 		}
 
-		// Parse metric
-		if len(fields) >= 7 {
+		// Parse metric (field index 6)
+		if len(fields) > 6 {
 			if metric, err := strconv.Atoi(fields[6]); err == nil {
 				route.Metric = metric
 			}
