@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -845,7 +846,9 @@ func readProcNetRoute() ([]Route, error) {
 
 		// Parse metric
 		if len(fields) >= 7 {
-			fmt.Sscanf(fields[6], "%d", &route.Metric)
+			if metric, err := strconv.Atoi(fields[6]); err == nil {
+				route.Metric = metric
+			}
 		}
 
 		routes = append(routes, route)
@@ -865,10 +868,11 @@ func hexToIP(hexStr string) string {
 	for i := 0; i < 4; i++ {
 		// Read in reverse order (little-endian)
 		byteHex := hexStr[i*2 : i*2+2]
-		val, err := fmt.Sscanf(byteHex, "%02X", &bytes[i])
-		if err != nil || val != 1 {
+		val, err := strconv.ParseUint(byteHex, 16, 8)
+		if err != nil {
 			return ""
 		}
+		bytes[i] = byte(val)
 	}
 
 	// Reverse byte order for little-endian to network byte order
@@ -884,11 +888,19 @@ func maskToCIDR(mask string) int {
 
 	var bits int
 	for _, part := range parts {
-		var octet int
-		fmt.Sscanf(part, "%d", &octet)
-		for octet > 0 {
-			bits += octet & 1
-			octet >>= 1
+		octet, err := strconv.Atoi(part)
+		if err != nil {
+			return 0
+		}
+		// Count leading ones in the octet
+		for b := 7; b >= 0; b-- {
+			if (octet & (1 << b)) != 0 {
+				bits++
+			} else {
+				// Once we hit a zero, all remaining bits should be zero for a valid netmask
+				// If not, this isn't a valid CIDR netmask
+				return bits
+			}
 		}
 	}
 	return bits
