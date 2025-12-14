@@ -15,9 +15,19 @@ import (
 
 // NetworkInfo captures network configuration including proxy, routing, and VPN details.
 type NetworkInfo struct {
+	System      SystemInfo  `json:"system" jsonschema:"description=System information including hostname, OS, and architecture"`
 	ProxyConfig ProxyConfig `json:"proxy_config" jsonschema:"description=Detected proxy configuration from environment variables, system settings, and PAC files"`
 	Routes      RouteInfo   `json:"routes" jsonschema:"description=System routing table and network interface information"`
 	VPN         VPNInfo     `json:"vpn" jsonschema:"description=VPN detection results including interfaces, applications, and routes"`
+}
+
+// SystemInfo captures basic system information.
+type SystemInfo struct {
+	Hostname     string    `json:"hostname" jsonschema:"description=System hostname"`
+	OS           string    `json:"os" jsonschema:"description=Operating system name such as linux, darwin, or windows"`
+	OSVersion    string    `json:"os_version,omitempty" jsonschema:"description=Operating system version or distribution details when available"`
+	Architecture string    `json:"architecture" jsonschema:"description=CPU architecture such as amd64 or arm64"`
+	CapturedAt   time.Time `json:"captured_at" jsonschema:"description=Timestamp when system information was captured (UTC)"`
 }
 
 // ProxyConfig captures all proxy-related configuration.
@@ -125,11 +135,113 @@ type VPNApp struct {
 // DiscoverNetwork gathers comprehensive network configuration information.
 func DiscoverNetwork(ctx context.Context) NetworkInfo {
 	info := NetworkInfo{
+		System:      discoverSystemInfo(),
 		ProxyConfig: discoverProxyConfig(ctx),
 		Routes:      discoverRoutes(ctx),
 		VPN:         discoverVPN(ctx),
 	}
 	return info
+}
+
+// discoverSystemInfo collects basic system information.
+func discoverSystemInfo() SystemInfo {
+	hostname, _ := os.Hostname()
+	// If hostname cannot be determined, use "unknown"
+	if hostname == "" {
+		hostname = "unknown"
+	}
+
+	info := SystemInfo{
+		Hostname:     hostname,
+		OS:           runtime.GOOS,
+		Architecture: runtime.GOARCH,
+		CapturedAt:   time.Now().UTC(),
+	}
+
+	// Attempt to detect OS version
+	info.OSVersion = detectOSVersion()
+
+	return info
+}
+
+// detectOSVersion attempts to detect the OS version or distribution details.
+func detectOSVersion() string {
+	switch runtime.GOOS {
+	case "darwin":
+		return detectMacOSVersion()
+	case "linux":
+		return detectLinuxVersion()
+	case "windows":
+		return detectWindowsVersion()
+	default:
+		return ""
+	}
+}
+
+// detectMacOSVersion detects macOS version.
+func detectMacOSVersion() string {
+	cmd := exec.Command("sw_vers", "-productVersion")
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	version := strings.TrimSpace(string(output))
+	if version != "" {
+		return "macOS " + version
+	}
+	return ""
+}
+
+// detectLinuxVersion detects Linux distribution and version.
+func detectLinuxVersion() string {
+	// Try /etc/os-release first (standard on modern Linux)
+	if data, err := os.ReadFile("/etc/os-release"); err == nil {
+		lines := strings.Split(string(data), "\n")
+		var prettyName, name, version string
+		for _, line := range lines {
+			if strings.HasPrefix(line, "PRETTY_NAME=") {
+				prettyName = strings.Trim(strings.TrimPrefix(line, "PRETTY_NAME="), `"`)
+			} else if strings.HasPrefix(line, "NAME=") {
+				name = strings.Trim(strings.TrimPrefix(line, "NAME="), `"`)
+			} else if strings.HasPrefix(line, "VERSION=") {
+				version = strings.Trim(strings.TrimPrefix(line, "VERSION="), `"`)
+			}
+		}
+		if prettyName != "" {
+			return prettyName
+		}
+		if name != "" {
+			if version != "" {
+				return name + " " + version
+			}
+			return name
+		}
+	}
+
+	// Fallback to uname
+	cmd := exec.Command("uname", "-r")
+	if output, err := cmd.Output(); err == nil {
+		return "Linux " + strings.TrimSpace(string(output))
+	}
+
+	return ""
+}
+
+// detectWindowsVersion detects Windows version.
+func detectWindowsVersion() string {
+	cmd := exec.Command("cmd", "/c", "ver")
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	version := strings.TrimSpace(string(output))
+	// Clean up the output
+	version = strings.TrimPrefix(version, "Microsoft Windows [Version ")
+	version = strings.TrimSuffix(version, "]")
+	if version != "" {
+		return "Windows " + version
+	}
+	return ""
 }
 
 // discoverProxyConfig detects all proxy configuration sources.

@@ -458,24 +458,46 @@ const htmlTemplate = `<!DOCTYPE html>
         // Embedded JSON data - directly embedded as JavaScript object literal
         const tlsCheckData = {{.JSONData}};
 
+        function renderSystemInfo() {
+            const network = tlsCheckData.network || {};
+            const system = network.system || {};
+            
+            let html = '<h2>System Information</h2>';
+            html += '<p style="color: #7f8c8d; margin-bottom: 15px;">Collected from: <strong>' + escapeHtml(system.hostname || 'unknown') + '</strong></p>';
+            html += '<div class="metadata">';
+            html += createMetadataItem('Hostname', system.hostname || 'N/A');
+            html += createMetadataItem('Operating System', system.os || 'N/A');
+            if (system.os_version) {
+                html += createMetadataItem('OS Version', system.os_version);
+            }
+            html += createMetadataItem('Architecture', system.architecture || 'N/A');
+            if (system.captured_at) {
+                html += createMetadataItem('Captured At', new Date(system.captured_at).toLocaleString());
+            }
+            html += '</div>';
+            
+            return html;
+        }
+
         function renderSummary() {
             const args = tlsCheckData.arguments || {};
             const results = tlsCheckData.results || [];
             const plan = tlsCheckData.plan || {};
 
-            const successCount = results.filter(r => !r.failure).length;
-            const failureCount = results.filter(r => r.failure).length;
+            const connectedCount = results.filter(r => !r.failure).length;
+            const issuesCount = results.filter(r => r.failure).length;
 
-            let html = '<div class="summary">';
+            let html = '<h2>Cluster Configuration</h2>';
+            html += '<div class="summary">';
             html += createSummaryCard('Cluster', args.cluster_name || 'N/A');
             html += createSummaryCard('Proxy Address', args.public_addr || 'N/A');
             html += createSummaryCard('Teleport Version', args.teleport_version || 'N/A');
             html += createSummaryCard('TLS Routing', args.tls_routing_enabled ? 'Enabled' : 'Disabled', 
                 args.tls_routing_enabled ? 'status-success' : 'status-warning');
             html += createSummaryCard('Total Probes', results.length.toString());
-            html += createSummaryCard('Successful', successCount.toString(), 'status-success');
-            if (failureCount > 0) {
-                html += createSummaryCard('Failed', failureCount.toString(), 'status-failure');
+            html += createSummaryCard('Connected', connectedCount.toString());
+            if (issuesCount > 0) {
+                html += createSummaryCard('Issues Detected', issuesCount.toString(), 'status-warning');
             }
             html += '</div>';
 
@@ -499,13 +521,13 @@ const htmlTemplate = `<!DOCTYPE html>
                 return '<p>No probe results available.</p>';
             }
 
-            let html = '<h2>Probe Results</h2>';
+            let html = '<h2>Connection Behaviors</h2>';
             html += '<div class="filter-bar">';
             html += '<label>Filter: </label>';
             html += '<select id="filter-status" onchange="filterResults()">';
             html += '<option value="all">All Results</option>';
-            html += '<option value="success">Successful Only</option>';
-            html += '<option value="failure">Failed Only</option>';
+            html += '<option value="success">Connected Only</option>';
+            html += '<option value="failure">Issues Only</option>';
             html += '</select>';
             html += '</div>';
 
@@ -515,8 +537,7 @@ const htmlTemplate = `<!DOCTYPE html>
             html += '<th>Target</th>';
             html += '<th>SNI</th>';
             html += '<th>ALPN</th>';
-            html += '<th>Status</th>';
-            html += '<th>Details</th>';
+            html += '<th>Behavior</th>';
             html += '</tr></thead><tbody>';
 
             results.forEach((result, idx) => {
@@ -531,10 +552,11 @@ const htmlTemplate = `<!DOCTYPE html>
                 html += ` + "`" + `<td>${escapeHtml((target.alpns || []).join(', ') || 'N/A')}</td>` + "`" + `;
                 
                 if (failure) {
-                    html += ` + "`" + `<td><span class="badge badge-failure">Failed</span></td>` + "`" + `;
-                    html += ` + "`" + `<td>${escapeHtml(failure.kind || 'unknown')}: ${escapeHtml(failure.message || 'N/A')}</td>` + "`" + `;
+                    html += ` + "`" + `<td>` + "`" + `;
+                    html += ` + "`" + `<div><strong>${escapeHtml(failure.kind || 'unknown')}</strong></div>` + "`" + `;
+                    html += ` + "`" + `<div style="color: #7f8c8d; font-size: 0.9em;">${escapeHtml(failure.message || 'N/A')}</div>` + "`" + `;
+                    html += ` + "`" + `</td>` + "`" + `;
                 } else {
-                    html += ` + "`" + `<td><span class="badge badge-success">Success</span></td>` + "`" + `;
                     const details = [];
                     if (result.negotiated_protocol) details.push(` + "`" + `Protocol: ${result.negotiated_protocol}` + "`" + `);
                     if (result.tls_version) details.push(` + "`" + `TLS: ${result.tls_version}` + "`" + `);
@@ -544,7 +566,13 @@ const htmlTemplate = `<!DOCTYPE html>
                             details.push(` + "`" + `Cert: <a class="cert-link" onclick="jumpToCert('${result.leaf_fingerprint}')">${escapeHtml(cert.subject.common_name)}</a>` + "`" + `);
                         }
                     }
-                    html += ` + "`" + `<td>${details.join(', ')}</td>` + "`" + `;
+                    html += ` + "`" + `<td>` + "`" + `;
+                    if (details.length > 0) {
+                        html += details.join('<br>');
+                    } else {
+                        html += 'Connected';
+                    }
+                    html += ` + "`" + `</td>` + "`" + `;
                 }
                 
                 html += '</tr>';
@@ -864,6 +892,7 @@ const htmlTemplate = `<!DOCTYPE html>
             const app = document.getElementById('app');
             let content = '';
             
+            content += renderSystemInfo();
             content += renderSummary();
             content += renderResults();
             content += renderNetworkInfo();
