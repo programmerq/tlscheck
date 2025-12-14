@@ -687,22 +687,41 @@ func discoverInterfaces() []NetInterface {
 }
 
 // discoverLinuxRoutes reads the Linux routing table.
+// It tries multiple methods in order:
+// 1. ip route show (modern Linux)
+// 2. route -n (legacy Linux)
+// 3. /proc/net/route (native Go, no external commands)
 func discoverLinuxRoutes(ctx context.Context, info RouteInfo) RouteInfo {
+	// Try ip route show first
 	cmd := exec.CommandContext(ctx, "ip", "route", "show")
 	output, err := cmd.CombinedOutput()
-	if err != nil {
-		// Fallback to route command
+	if err == nil {
+		info.Available = true
+		info.Routes = parseLinuxRoutes(string(output))
+	} else {
+		// Try route -n as fallback
 		cmd = exec.CommandContext(ctx, "route", "-n")
 		output, err = cmd.CombinedOutput()
-		if err != nil {
-			info.Available = false
-			info.Error = fmt.Sprintf("failed to capture routes: %v", err)
-			return info
+		if err == nil {
+			info.Available = true
+			info.Routes = parseLinuxRoutes(string(output))
+		} else {
+			// Try native /proc/net/route as last resort
+			routes, err := readProcNetRoute()
+			if err == nil && len(routes) > 0 {
+				info.Available = true
+				info.Routes = routes
+			} else {
+				info.Available = false
+				if err != nil {
+					info.Error = fmt.Sprintf("failed to capture routes: %v", err)
+				} else {
+					info.Error = "failed to capture routes: no methods available"
+				}
+				return info
+			}
 		}
 	}
-
-	info.Available = true
-	info.Routes = parseLinuxRoutes(string(output))
 
 	// Extract default gateway
 	for _, route := range info.Routes {
@@ -767,6 +786,112 @@ func parseLinuxRoutes(output string) []Route {
 	}
 
 	return routes
+}
+
+// readProcNetRoute reads the Linux routing table from /proc/net/route.
+// This is a native Go implementation that doesn't require external commands.
+func readProcNetRoute() ([]Route, error) {
+	data, err := os.ReadFile("/proc/net/route")
+	if err != nil {
+		return nil, err
+	}
+
+	var routes []Route
+	lines := strings.Split(string(data), "\n")
+
+	// Skip header line
+	for i, line := range lines {
+		if i == 0 {
+			continue
+		}
+
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// Format: Iface Destination Gateway Flags RefCnt Use Metric Mask MTU Window IRTT
+		fields := strings.Fields(line)
+		if len(fields) < 8 {
+			continue
+		}
+
+		route := Route{
+			Interface: fields[0],
+		}
+
+		// Parse destination (hex, little-endian)
+		if dest := hexToIP(fields[1]); dest != "" {
+			if dest == "0.0.0.0" {
+				route.Destination = "default"
+			} else {
+				// Convert mask to CIDR notation
+				mask := hexToIP(fields[7])
+				cidr := maskToCIDR(mask)
+				if cidr > 0 && cidr < 32 {
+					route.Destination = fmt.Sprintf("%s/%d", dest, cidr)
+				} else if cidr == 32 {
+					route.Destination = dest
+				} else {
+					route.Destination = dest
+				}
+			}
+		}
+
+		// Parse gateway (hex, little-endian)
+		if gw := hexToIP(fields[2]); gw != "" && gw != "0.0.0.0" {
+			route.Gateway = gw
+		}
+
+		// Parse metric
+		if len(fields) >= 7 {
+			fmt.Sscanf(fields[6], "%d", &route.Metric)
+		}
+
+		routes = append(routes, route)
+	}
+
+	return routes, nil
+}
+
+// hexToIP converts a little-endian hex string to an IP address.
+// /proc/net/route stores IPs in little-endian hex format.
+func hexToIP(hexStr string) string {
+	if len(hexStr) != 8 {
+		return ""
+	}
+
+	var bytes [4]byte
+	for i := 0; i < 4; i++ {
+		// Read in reverse order (little-endian)
+		byteHex := hexStr[i*2 : i*2+2]
+		val, err := fmt.Sscanf(byteHex, "%02X", &bytes[i])
+		if err != nil || val != 1 {
+			return ""
+		}
+	}
+
+	// Reverse byte order for little-endian to network byte order
+	return fmt.Sprintf("%d.%d.%d.%d", bytes[3], bytes[2], bytes[1], bytes[0])
+}
+
+// maskToCIDR converts a netmask to CIDR prefix length.
+func maskToCIDR(mask string) int {
+	parts := strings.Split(mask, ".")
+	if len(parts) != 4 {
+		return 0
+	}
+
+	var bits int
+	for _, part := range parts {
+		var octet int
+		fmt.Sscanf(part, "%d", &octet)
+		for octet > 0 {
+			bits += octet & 1
+			octet >>= 1
+		}
+	}
+	return bits
 }
 
 // discoverDarwinRoutes reads the macOS routing table.
