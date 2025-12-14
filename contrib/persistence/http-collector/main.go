@@ -175,6 +175,13 @@ func (h *collectorHandler) persistToDisk(envelope *report.Envelope, rawJSON []by
 			return fmt.Errorf("failed to generate ID: %w", err)
 		}
 		envelope.Report.ID = id
+
+		// Re-marshal the envelope to include the generated ID in the stored JSON
+		updatedJSON, err := report.MarshalEnvelope(envelope)
+		if err != nil {
+			return fmt.Errorf("failed to marshal envelope with ID: %w", err)
+		}
+		rawJSON = updatedJSON
 	}
 
 	// Create filename using timestamp and ID
