@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"runtime"
 	"testing"
 )
 
@@ -583,4 +584,134 @@ func TestNetworkJSONStructure(t *testing.T) {
 	}
 
 	t.Logf("Successfully marshaled and unmarshaled NetworkInfo with %d bytes", len(data))
+}
+
+func TestHexToIP(t *testing.T) {
+	tests := []struct {
+		name     string
+		hexStr   string
+		expected string
+	}{
+		{
+			name:     "localhost",
+			hexStr:   "0100007F",
+			expected: "127.0.0.1",
+		},
+		{
+			name:     "default route",
+			hexStr:   "00000000",
+			expected: "0.0.0.0",
+		},
+		{
+			name:     "192.168.1.1",
+			hexStr:   "0101A8C0",
+			expected: "192.168.1.1",
+		},
+		{
+			name:     "10.0.0.1",
+			hexStr:   "0100000A",
+			expected: "10.0.0.1",
+		},
+		{
+			name:     "invalid length",
+			hexStr:   "010000",
+			expected: "",
+		},
+		{
+			name:     "empty",
+			hexStr:   "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := hexToIP(tt.hexStr)
+			if result != tt.expected {
+				t.Errorf("hexToIP(%q) = %q, want %q", tt.hexStr, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestMaskToCIDR(t *testing.T) {
+	tests := []struct {
+		name     string
+		mask     string
+		expected int
+	}{
+		{
+			name:     "/24 netmask",
+			mask:     "255.255.255.0",
+			expected: 24,
+		},
+		{
+			name:     "/32 netmask",
+			mask:     "255.255.255.255",
+			expected: 32,
+		},
+		{
+			name:     "/16 netmask",
+			mask:     "255.255.0.0",
+			expected: 16,
+		},
+		{
+			name:     "/8 netmask",
+			mask:     "255.0.0.0",
+			expected: 8,
+		},
+		{
+			name:     "/0 netmask (default route)",
+			mask:     "0.0.0.0",
+			expected: 0,
+		},
+		{
+			name:     "invalid format",
+			mask:     "invalid",
+			expected: 0,
+		},
+		{
+			name:     "invalid netmask with non-contiguous bits",
+			mask:     "255.240.255.0",
+			expected: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := maskToCIDR(tt.mask)
+			if result != tt.expected {
+				t.Errorf("maskToCIDR(%q) = %d, want %d", tt.mask, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestReadProcNetRoute(t *testing.T) {
+	// This test only runs on Linux since /proc/net/route only exists there
+	if runtime.GOOS != "linux" {
+		t.Skip("Skipping /proc/net/route test on non-Linux platform")
+	}
+
+	routes, err := readProcNetRoute()
+	if err != nil {
+		// It's possible /proc/net/route doesn't exist in some environments
+		t.Logf("readProcNetRoute failed (may be expected in some environments): %v", err)
+		return
+	}
+
+	// Should find at least the default route (usually)
+	t.Logf("Found %d routes from /proc/net/route", len(routes))
+
+	for i, route := range routes {
+		t.Logf("Route %d: Dest=%s Gateway=%s Interface=%s Metric=%d",
+			i, route.Destination, route.Gateway, route.Interface, route.Metric)
+	}
+
+	// Verify all routes have an interface
+	for _, route := range routes {
+		if route.Interface == "" {
+			t.Error("Route missing interface name")
+		}
+	}
 }
