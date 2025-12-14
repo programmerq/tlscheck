@@ -984,17 +984,17 @@
             "type": "integer",
             "description": "Total bytes read during the TLS handshake"
           },
-          "dial_duration_ms": {
+          "dial_duration_ns": {
             "type": "integer",
-            "description": "Time taken to establish TCP connection in nanoseconds (despite _ms suffix)"
+            "description": "Time taken to establish TCP connection in nanoseconds"
           },
-          "handshake_duration_ms": {
+          "handshake_duration_ns": {
             "type": "integer",
-            "description": "Time taken to complete TLS handshake in nanoseconds (despite _ms suffix)"
+            "description": "Time taken to complete TLS handshake in nanoseconds"
           },
-          "total_duration_ms": {
+          "total_duration_ns": {
             "type": "integer",
-            "description": "Total time from start to finish in nanoseconds (despite _ms suffix)"
+            "description": "Total time from start to finish in nanoseconds"
           },
           "tls_version": {
             "type": "string",
