@@ -55,8 +55,15 @@ func (e *Engine) SetRootCAs(pool *x509.CertPool) {
 }
 
 // SetClientCert configures the client certificate and key used for mutual TLS.
+// The cert/key pair is validated up front; if they cannot form a valid TLS
+// certificate the call is a no-op so clientCertFingerprint is only ever non-empty
+// when the pair is actually usable.
 func (e *Engine) SetClientCert(certPEM, keyPEM []byte) {
 	if e == nil {
+		return
+	}
+	// Pre-validate that the cert and key can form a valid TLS certificate pair.
+	if _, err := tls.X509KeyPair(certPEM, keyPEM); err != nil {
 		return
 	}
 	e.ClientCertPEM = certPEM
@@ -233,6 +240,13 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 		target.ServiceKey, attempt, target.Address, target.Port,
 		target.PrimarySNI, target.ALPNs, target.UseProxy)
 
+	// If the target is configured to use a client certificate and we have one, record the
+	// fingerprint immediately so it appears in the result regardless of whether the connection
+	// ultimately succeeds or fails.
+	if target.UseClientCert != nil && *target.UseClientCert && e.clientCertFingerprint != "" {
+		res.ClientCertFingerprint = e.clientCertFingerprint
+	}
+
 	dialCtx, cancel := context.WithTimeout(ctx, e.Timeout)
 	defer cancel()
 
@@ -284,10 +298,6 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 		cert, err := tls.X509KeyPair(e.ClientCertPEM, e.ClientKeyPEM)
 		if err == nil {
 			tlsCfg.Certificates = []tls.Certificate{cert}
-			// Set the client cert fingerprint in the result
-			if e.clientCertFingerprint != "" {
-				res.ClientCertFingerprint = e.clientCertFingerprint
-			}
 		}
 	}
 
