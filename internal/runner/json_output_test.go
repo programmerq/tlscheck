@@ -1,80 +1,67 @@
 package runner
 
 import (
-"context"
-"encoding/json"
-"testing"
+	"context"
+	"testing"
 
-"github.com/programmerq/tlscheck/internal/config"
-"github.com/programmerq/tlscheck/internal/discovery"
-"github.com/programmerq/tlscheck/internal/plan"
-"github.com/programmerq/tlscheck/internal/probe"
+	"github.com/programmerq/tlscheck/internal/config"
+	"github.com/programmerq/tlscheck/internal/discovery"
+	"github.com/programmerq/tlscheck/internal/plan"
+	"github.com/programmerq/tlscheck/internal/probe"
 )
 
+// TestClientCertInJSONOutput verifies that when a client certificate is configured on the
+// engine, it appears in the exec.Certs map AND that results for targets with
+// UseClientCert=true carry the correct ClientCertFingerprint — even when the TCP
+// connection itself fails (no reachable server).
 func TestClientCertInJSONOutput(t *testing.T) {
-certPEM, keyPEM, err := discovery.GenerateTestCertificate()
-if err != nil {
-t.Fatalf("failed to generate test cert: %v", err)
-}
+	t.Parallel()
 
-engine := probe.NewEngine()
-engine.SetClientCert(certPEM, keyPEM)
+	certPEM, keyPEM, err := discovery.GenerateTestCertificate()
+	if err != nil {
+		t.Fatalf("failed to generate test cert: %v", err)
+	}
 
-// Check the cert is available
-clientCerts := engine.GetClientCertificates()
-if len(clientCerts) == 0 {
-t.Fatal("GetClientCertificates returned empty - cert not set on engine")
-}
+	engine := probe.NewEngine()
+	engine.SetClientCert(certPEM, keyPEM)
 
-var clientCertFP string
-for fp := range clientCerts {
-clientCertFP = fp
-}
-t.Logf("Client cert fingerprint: %s", clientCertFP)
+	// Verify the engine exposes the cert.
+	clientCerts := engine.GetClientCertificates()
+	if len(clientCerts) == 0 {
+		t.Fatal("GetClientCertificates returned empty - cert not set on engine")
+	}
+	var clientCertFP string
+	for fp := range clientCerts {
+		clientCertFP = fp
+	}
 
-opts := config.Options{
-PublicAddr: "test.example.com",
-Repeat:     1,
-ClientCert: &config.ClientCertInfo{Fingerprint: clientCertFP},
-}
+	opts := config.Options{
+		PublicAddr: "test.example.com",
+		Repeat:     1,
+		ClientCert: &config.ClientCertInfo{Fingerprint: clientCertFP},
+	}
 
-builder := PlanBuilderFunc(plan.Build)
-exec, _ := Execute(context.Background(), opts, builder, engine)
+	exec, _ := Execute(context.Background(), opts, PlanBuilderFunc(plan.Build), engine)
 
-// Marshal to JSON to simulate real output
-data, err := json.MarshalIndent(exec, "", "  ")
-if err != nil {
-t.Fatalf("failed to marshal: %v", err)
-}
+	// The client cert must appear in exec.Certs regardless of probe success/failure.
+	if len(exec.Certs) == 0 {
+		t.Fatal("client cert not in exec.Certs")
+	}
+	if _, ok := exec.Certs[clientCertFP]; !ok {
+		t.Errorf("client cert not found in exec.Certs by fingerprint %s", clientCertFP)
+	}
 
-t.Logf("Certs map size: %d", len(exec.Certs))
-if len(exec.Certs) == 0 {
-t.Error("FAIL: client cert not in exec.Certs!")
-t.Logf("JSON output:\n%s", string(data[:min(len(data), 2000)]))
-} else {
-if _, ok := exec.Certs[clientCertFP]; ok {
-t.Logf("PASS: client cert found in exec.Certs with fingerprint %s", clientCertFP)
-} else {
-t.Errorf("client cert not found in exec.Certs by fingerprint %s", clientCertFP)
-}
-}
-
-// Check if any result has ClientCertFingerprint set
-var foundResultWithCert bool
-for _, r := range exec.Results {
-if r.ClientCertFingerprint != "" {
-foundResultWithCert = true
-t.Logf("Result %s has ClientCertFingerprint: %s", r.Target.ServiceKey, r.ClientCertFingerprint)
-}
-}
-if !foundResultWithCert {
-t.Log("No results had ClientCertFingerprint set (probe likely failed due to no real server)")
-}
-}
-
-func min(a, b int) int {
-if a < b {
-return a
-}
-return b
+	// Every result whose target has UseClientCert=true must carry the fingerprint, even when
+	// the underlying TCP connection failed.
+	for _, r := range exec.Results {
+		if r.Target.UseClientCert != nil && *r.Target.UseClientCert {
+			if r.ClientCertFingerprint == "" {
+				t.Errorf("result %s: UseClientCert=true but ClientCertFingerprint is empty",
+					r.Target.ServiceKey)
+			} else if r.ClientCertFingerprint != clientCertFP {
+				t.Errorf("result %s: ClientCertFingerprint = %s, want %s",
+					r.Target.ServiceKey, r.ClientCertFingerprint, clientCertFP)
+			}
+		}
+	}
 }

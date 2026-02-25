@@ -233,6 +233,13 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 		target.ServiceKey, attempt, target.Address, target.Port,
 		target.PrimarySNI, target.ALPNs, target.UseProxy)
 
+	// If the target is configured to use a client certificate and we have one, record the
+	// fingerprint immediately so it appears in the result regardless of whether the connection
+	// ultimately succeeds or fails.
+	if target.UseClientCert != nil && *target.UseClientCert && e.clientCertFingerprint != "" {
+		res.ClientCertFingerprint = e.clientCertFingerprint
+	}
+
 	dialCtx, cancel := context.WithTimeout(ctx, e.Timeout)
 	defer cancel()
 
@@ -284,10 +291,6 @@ func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt
 		cert, err := tls.X509KeyPair(e.ClientCertPEM, e.ClientKeyPEM)
 		if err == nil {
 			tlsCfg.Certificates = []tls.Certificate{cert}
-			// Set the client cert fingerprint in the result
-			if e.clientCertFingerprint != "" {
-				res.ClientCertFingerprint = e.clientCertFingerprint
-			}
 		}
 	}
 
