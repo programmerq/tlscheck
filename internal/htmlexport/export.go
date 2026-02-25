@@ -579,11 +579,9 @@ const htmlTemplate = `<!DOCTYPE html>
                             const cn = (ccert.subject && ccert.subject.common_name)
                                 ? ccert.subject.common_name : fp.slice(0, 12) + '\u2026';
                             html += '<div style="font-size:0.88em;margin-top:4px">Client Cert: <a class="cert-link" onclick="jumpToCert(\'' + fp + '\')">' + escapeHtml(cn) + '</a></div>';
-                        } else {
-                            html += '<div style="font-size:0.88em;margin-top:4px;color:var(--text-muted)">Client Cert: used</div>';
+                        } else if (fp) {
+                            html += '<div style="font-size:0.88em;margin-top:4px;color:var(--text-muted)">Client Cert: ' + escapeHtml(fp.slice(0, 16)) + '\u2026</div>';
                         }
-                    } else if (target.use_client_cert === false) {
-                        html += '<div style="font-size:0.88em;margin-top:4px;color:var(--text-subtle)">Client Cert: none</div>';
                     }
                     html += '</td>';
                 } else {
@@ -608,11 +606,9 @@ const htmlTemplate = `<!DOCTYPE html>
                             const cn = (ccert.subject && ccert.subject.common_name)
                                 ? ccert.subject.common_name : fp.slice(0, 12) + '\u2026';
                             details.push('Client Cert: <a class="cert-link" onclick="jumpToCert(\'' + fp + '\')">' + escapeHtml(cn) + '</a>');
-                        } else {
-                            details.push('Client Cert: used');
+                        } else if (fp) {
+                            details.push('Client Cert: ' + escapeHtml(fp.slice(0, 16)) + '\u2026');
                         }
-                    } else if (target.use_client_cert === false) {
-                        details.push('<span style="color:var(--text-subtle)">Client Cert: none</span>');
                     }
                     html += '<td>';
                     html += details.length > 0
