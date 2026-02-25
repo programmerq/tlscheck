@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"net"
 	"testing"
 
 	"github.com/programmerq/tlscheck/internal/config"
@@ -14,6 +15,9 @@ import (
 // engine, it appears in the exec.Certs map AND that results for targets with
 // UseClientCert=true carry the correct ClientCertFingerprint — even when the TCP
 // connection itself fails (no reachable server).
+//
+// The test is hermetic: it uses a stub builder that emits a single target pointing
+// at a closed local port so no real DNS resolution or outbound network calls are made.
 func TestClientCertInJSONOutput(t *testing.T) {
 	t.Parallel()
 
@@ -35,13 +39,36 @@ func TestClientCertInJSONOutput(t *testing.T) {
 		clientCertFP = fp
 	}
 
+	// Bind then immediately close a local port so the probe will fail with
+	// "connection refused" rather than hanging on a timeout.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to find free port: %v", err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+
+	trueVal := true
+	target := plan.ProbeTarget{
+		ServiceKey:    "test_service",
+		Address:       "127.0.0.1",
+		Port:          port,
+		PrimarySNI:    "example.com",
+		ALPNs:         []string{"h2"},
+		Trust:         plan.TrustSystemRoots,
+		Repeat:        1,
+		UseClientCert: &trueVal,
+	}
+	builder := &stubBuilder{plan: plan.Plan{Targets: []plan.ProbeTarget{target}}}
+
 	opts := config.Options{
-		PublicAddr: "test.example.com",
-		Repeat:     1,
 		ClientCert: &config.ClientCertInfo{Fingerprint: clientCertFP},
 	}
 
-	exec, _ := Execute(context.Background(), opts, PlanBuilderFunc(plan.Build), engine)
+	exec, err := Execute(context.Background(), opts, builder, engine)
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
 
 	// The client cert must appear in exec.Certs regardless of probe success/failure.
 	if len(exec.Certs) == 0 {

@@ -16,7 +16,7 @@ type CertExtensionInfo struct {
 	OID      string `json:"oid" jsonschema:"description=OID of the certificate extension in dotted-decimal notation"`
 	Name     string `json:"name,omitempty" jsonschema:"description=Human-readable name of the extension (set for well-known Teleport OIDs)"`
 	Critical bool   `json:"critical,omitempty" jsonschema:"description=Whether the extension is marked critical"`
-	Value    string `json:"value" jsonschema:"description=Decoded UTF-8 string value of the extension, or hex-encoded bytes if not decodable"`
+	Value    string `json:"value" jsonschema:"description=Decoded UTF-8 string value of the extension when possible; otherwise hex-encoded bytes"`
 }
 
 // teleportOIDNames maps known Teleport x509 extension OIDs to human-readable names.

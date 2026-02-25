@@ -55,8 +55,15 @@ func (e *Engine) SetRootCAs(pool *x509.CertPool) {
 }
 
 // SetClientCert configures the client certificate and key used for mutual TLS.
+// The cert/key pair is validated up front; if they cannot form a valid TLS
+// certificate the call is a no-op so clientCertFingerprint is only ever non-empty
+// when the pair is actually usable.
 func (e *Engine) SetClientCert(certPEM, keyPEM []byte) {
 	if e == nil {
+		return
+	}
+	// Pre-validate that the cert and key can form a valid TLS certificate pair.
+	if _, err := tls.X509KeyPair(certPEM, keyPEM); err != nil {
 		return
 	}
 	e.ClientCertPEM = certPEM

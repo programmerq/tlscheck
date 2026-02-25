@@ -1293,7 +1293,7 @@
                 },
                 "value": {
                   "type": "string",
-                  "description": "Decoded UTF-8 string value of the extension"
+                  "description": "Decoded UTF-8 string value of the extension when possible; otherwise hex-encoded bytes"
                 }
               },
               "additionalProperties": false,
