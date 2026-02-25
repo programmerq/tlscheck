@@ -189,7 +189,7 @@ func TestWriteShowsTSHProfile(t *testing.T) {
 	}
 }
 
-func TestWriteShowsClientCertColumn(t *testing.T) {
+func TestWriteShowsClientCertInBehavior(t *testing.T) {
 	trueVal := true
 	falseVal := false
 	exec := runner.Execution{
@@ -227,8 +227,9 @@ func TestWriteShowsClientCertColumn(t *testing.T) {
 	}
 
 	html := buf.String()
+	// Client Cert should appear in the Behavior column, not as a separate column header
 	if !strings.Contains(html, "Client Cert") {
-		t.Error("HTML output missing Client Cert column header")
+		t.Error("HTML output missing client cert mention in behavior column")
 	}
 	if !strings.Contains(html, "use_client_cert") {
 		t.Error("HTML output missing use_client_cert in JSON data")

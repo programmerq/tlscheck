@@ -4,30 +4,124 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/hex"
 	"encoding/pem"
+	"strconv"
 	"strings"
 )
 
+// CertExtensionInfo represents a parsed x509 certificate extension.
+type CertExtensionInfo struct {
+	OID      string `json:"oid" jsonschema:"description=OID of the certificate extension in dotted-decimal notation"`
+	Name     string `json:"name,omitempty" jsonschema:"description=Human-readable name of the extension (set for well-known Teleport OIDs)"`
+	Critical bool   `json:"critical,omitempty" jsonschema:"description=Whether the extension is marked critical"`
+	Value    string `json:"value" jsonschema:"description=Decoded UTF-8 string value of the extension, or hex-encoded bytes if not decodable"`
+}
+
+// teleportOIDNames maps known Teleport x509 extension OIDs to human-readable names.
+// OIDs sourced from https://github.com/gravitational/teleport/blob/v18.6.8/lib/tlsca/ca.go
+var teleportOIDNames = map[string]string{
+	"1.3.9999.1.1":  "KubeUsers",
+	"1.3.9999.1.2":  "KubeGroups",
+	"1.3.9999.1.3":  "KubeCluster",
+	"1.3.9999.1.4":  "AppSessionID",
+	"1.3.9999.1.5":  "AppClusterName",
+	"1.3.9999.1.6":  "AppPublicAddr",
+	"1.3.9999.1.7":  "TeleportCluster",
+	"1.3.9999.1.8":  "MFAVerified",
+	"1.3.9999.1.9":  "LoginIP",
+	"1.3.9999.1.10": "AppName",
+	"1.3.9999.1.11": "AppAWSRoleARN",
+	"1.3.9999.1.12": "AWSRoleARNs",
+	"1.3.9999.1.13": "RenewableCertificate",
+	"1.3.9999.1.14": "Generation",
+	"1.3.9999.1.15": "PrivateKeyPolicy",
+	"1.3.9999.1.16": "AppAzureIdentity",
+	"1.3.9999.1.17": "AzureIdentity",
+	"1.3.9999.1.18": "AppGCPServiceAccount",
+	"1.3.9999.1.19": "GCPServiceAccounts",
+	"1.3.9999.1.20": "UserType",
+	"1.3.9999.1.21": "AppTargetPort",
+	"1.3.9999.1.22": "AppAWSCredentialProcessCredentials",
+	"1.3.9999.2.1":  "DatabaseServiceName",
+	"1.3.9999.2.2":  "DatabaseProtocol",
+	"1.3.9999.2.3":  "DatabaseUsername",
+	"1.3.9999.2.4":  "DatabaseName",
+	"1.3.9999.2.5":  "DatabaseNames",
+	"1.3.9999.2.6":  "DatabaseUsers",
+	"1.3.9999.2.7":  "Impersonator",
+	"1.3.9999.2.8":  "ActiveRequests",
+	"1.3.9999.2.9":  "DisallowReissue",
+	"1.3.9999.2.10": "AllowedResources",
+	"1.3.9999.2.11": "SystemRoles",
+	"1.3.9999.2.12": "PreviousIdentityExpires",
+	"1.3.9999.2.13": "ConnectionDiagnosticID",
+	"1.3.9999.2.14": "License",
+	"1.3.9999.2.15": "PinnedIP",
+	"1.3.9999.2.16": "CreateWindowsUser",
+	"1.3.9999.2.17": "DesktopsLimitExceeded",
+	"1.3.9999.2.18": "Bot",
+	"1.3.9999.2.19": "RequestedDatabaseRoles",
+	"1.3.9999.2.20": "BotInstance",
+	"1.3.9999.2.21": "JoinAttributes",
+	"1.3.9999.2.22": "ADStatus",
+	"1.3.9999.2.23": "JoinToken",
+	"1.3.9999.2.24": "ScopePin",
+	"1.3.9999.2.25": "AgentScope",
+	"1.3.9999.2.27": "ImmutableLabelHash",
+	"1.3.9999.3.1":  "DeviceID",
+	"1.3.9999.3.2":  "DeviceAssetTag",
+	"1.3.9999.3.3":  "DeviceCredentialID",
+}
+
+// oidToString converts an ASN.1 OID to its dotted-decimal string representation.
+func oidToString(oid asn1.ObjectIdentifier) string {
+	parts := make([]string, len(oid))
+	for i, v := range oid {
+		parts[i] = strconv.Itoa(v)
+	}
+	return strings.Join(parts, ".")
+}
+
+// decodeExtensionValue attempts to decode an ASN.1-encoded extension value in
+// the following order: single UTF-8 string → sequence of UTF-8 strings (joined
+// with ", ") → hex fallback.
+func decodeExtensionValue(raw []byte) string {
+	// Try single UTF-8 string
+	var s string
+	if rest, err := asn1.Unmarshal(raw, &s); err == nil && len(rest) == 0 {
+		return s
+	}
+	// Try a sequence of UTF-8 strings
+	var strs []string
+	if rest, err := asn1.Unmarshal(raw, &strs); err == nil && len(rest) == 0 && len(strs) > 0 {
+		return strings.Join(strs, ", ")
+	}
+	// Fall back to hex
+	return strings.ToUpper(hex.EncodeToString(raw))
+}
+
 // CertInfo contains expanded certificate metadata for JSON output.
 type CertInfo struct {
-	PEM               string         `json:"pem" jsonschema:"description=Certificate in PEM-encoded format"`
-	Fingerprint       string         `json:"fingerprint" jsonschema:"description=SHA-256 fingerprint of the certificate (uppercase hex)"`
-	Subject           CertName       `json:"subject" jsonschema:"description=Subject distinguished name from the certificate"`
-	Issuer            CertName       `json:"issuer" jsonschema:"description=Issuer distinguished name from the certificate"`
-	Validity          CertValidity   `json:"validity" jsonschema:"description=Certificate validity period (notBefore and notAfter timestamps)"`
-	SANs              CertSANs       `json:"sans" jsonschema:"description=Subject Alternative Names from the certificate"`
-	AuthorityKeyID    string         `json:"authority_key_id,omitempty" jsonschema:"description=Authority Key Identifier extension (colon-separated hex bytes)"`
-	SubjectKeyID      string         `json:"subject_key_id,omitempty" jsonschema:"description=Subject Key Identifier extension (colon-separated hex bytes)"`
-	IsCA              bool           `json:"is_ca" jsonschema:"description=Whether this certificate is a Certificate Authority"`
-	IssuerFingerprint string         `json:"issuer_fingerprint,omitempty" jsonschema:"description=SHA-256 fingerprint of the issuer's certificate if present in the chain"`
-	SerialNumber      string         `json:"serial_number,omitempty" jsonschema:"description=Certificate serial number as a decimal string"`
-	SignatureAlgo     string         `json:"signature_algorithm,omitempty" jsonschema:"description=Signature algorithm used (e.g. SHA256-RSA, ECDSA-SHA256)"`
-	PublicKeyAlgo     string         `json:"public_key_algorithm,omitempty" jsonschema:"description=Public key algorithm (e.g. RSA, ECDSA)"`
-	KeyUsage          []string       `json:"key_usage,omitempty" jsonschema:"description=Key usage extensions (e.g. DigitalSignature, KeyEncipherment)"`
-	ExtKeyUsage       []string       `json:"ext_key_usage,omitempty" jsonschema:"description=Extended key usage extensions (e.g. ServerAuth, ClientAuth)"`
-	Source            CertSource     `json:"source,omitempty" jsonschema:"description=How this certificate was obtained (server, client, or reference)"`
-	TrustStatus       *CertTrustInfo `json:"trust_status,omitempty" jsonschema:"description=Trust and MITM detection information for this certificate"`
+	PEM               string              `json:"pem" jsonschema:"description=Certificate in PEM-encoded format"`
+	Fingerprint       string              `json:"fingerprint" jsonschema:"description=SHA-256 fingerprint of the certificate (uppercase hex)"`
+	Subject           CertName            `json:"subject" jsonschema:"description=Subject distinguished name from the certificate"`
+	Issuer            CertName            `json:"issuer" jsonschema:"description=Issuer distinguished name from the certificate"`
+	Validity          CertValidity        `json:"validity" jsonschema:"description=Certificate validity period (notBefore and notAfter timestamps)"`
+	SANs              CertSANs            `json:"sans" jsonschema:"description=Subject Alternative Names from the certificate"`
+	AuthorityKeyID    string              `json:"authority_key_id,omitempty" jsonschema:"description=Authority Key Identifier extension (colon-separated hex bytes)"`
+	SubjectKeyID      string              `json:"subject_key_id,omitempty" jsonschema:"description=Subject Key Identifier extension (colon-separated hex bytes)"`
+	IsCA              bool                `json:"is_ca" jsonschema:"description=Whether this certificate is a Certificate Authority"`
+	IssuerFingerprint string              `json:"issuer_fingerprint,omitempty" jsonschema:"description=SHA-256 fingerprint of the issuer's certificate if present in the chain"`
+	SerialNumber      string              `json:"serial_number,omitempty" jsonschema:"description=Certificate serial number as a decimal string"`
+	SignatureAlgo     string              `json:"signature_algorithm,omitempty" jsonschema:"description=Signature algorithm used (e.g. SHA256-RSA, ECDSA-SHA256)"`
+	PublicKeyAlgo     string              `json:"public_key_algorithm,omitempty" jsonschema:"description=Public key algorithm (e.g. RSA, ECDSA)"`
+	KeyUsage          []string            `json:"key_usage,omitempty" jsonschema:"description=Key usage extensions (e.g. DigitalSignature, KeyEncipherment)"`
+	ExtKeyUsage       []string            `json:"ext_key_usage,omitempty" jsonschema:"description=Extended key usage extensions (e.g. ServerAuth, ClientAuth)"`
+	Extensions        []CertExtensionInfo `json:"extensions,omitempty" jsonschema:"description=Custom certificate extensions with OID, optional Teleport name, and decoded value"`
+	Source            CertSource          `json:"source,omitempty" jsonschema:"description=How this certificate was obtained (server, client, or reference)"`
+	TrustStatus       *CertTrustInfo      `json:"trust_status,omitempty" jsonschema:"description=Trust and MITM detection information for this certificate"`
 }
 
 // CertName represents a certificate subject or issuer name.
@@ -95,6 +189,7 @@ func ParseCertInfo(cert *x509.Certificate, pemData string) *CertInfo {
 		PublicKeyAlgo:  cert.PublicKeyAlgorithm.String(),
 		KeyUsage:       parseKeyUsage(cert.KeyUsage),
 		ExtKeyUsage:    parseExtKeyUsage(cert.ExtKeyUsage),
+		Extensions:     parseExtensions(cert.Extensions),
 	}
 
 	return info
@@ -218,6 +313,41 @@ func parseExtKeyUsage(extUsage []x509.ExtKeyUsage) []string {
 		}
 	}
 	return usages
+}
+
+// parseExtensions parses the raw x509 extensions, skipping standard extensions
+// that are already captured as typed fields, and decoding Teleport-specific ones by name.
+func parseExtensions(exts []pkix.Extension) []CertExtensionInfo {
+	// Standard extension OIDs handled by the x509 package (skip them to avoid duplication).
+	standardOIDs := map[string]bool{
+		"2.5.29.14":         true, // SubjectKeyIdentifier
+		"2.5.29.15":         true, // KeyUsage
+		"2.5.29.17":         true, // SubjectAltName
+		"2.5.29.19":         true, // BasicConstraints
+		"2.5.29.31":         true, // CRLDistributionPoints
+		"2.5.29.32":         true, // CertificatePolicies
+		"2.5.29.35":         true, // AuthorityKeyIdentifier
+		"2.5.29.37":         true, // ExtKeyUsage
+		"1.3.6.1.5.5.7.1.1": true, // AuthorityInformationAccess
+	}
+
+	var result []CertExtensionInfo
+	for _, ext := range exts {
+		oidStr := oidToString(ext.Id)
+		if standardOIDs[oidStr] {
+			continue
+		}
+		info := CertExtensionInfo{
+			OID:      oidStr,
+			Critical: ext.Critical,
+			Value:    decodeExtensionValue(ext.Value),
+		}
+		if name, ok := teleportOIDNames[oidStr]; ok {
+			info.Name = name
+		}
+		result = append(result, info)
+	}
+	return result
 }
 
 func copySlice(input []string) []string {

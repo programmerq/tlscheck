@@ -1276,6 +1276,36 @@
             "type": "array",
             "description": "Extended key usage extensions (e.g. ServerAuth"
           },
+          "extensions": {
+            "items": {
+              "properties": {
+                "oid": {
+                  "type": "string",
+                  "description": "OID of the certificate extension in dotted-decimal notation"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Human-readable name of the extension (set for well-known Teleport OIDs)"
+                },
+                "critical": {
+                  "type": "boolean",
+                  "description": "Whether the extension is marked critical"
+                },
+                "value": {
+                  "type": "string",
+                  "description": "Decoded UTF-8 string value of the extension"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "oid",
+                "value"
+              ]
+            },
+            "type": "array",
+            "description": "Custom certificate extensions with OID"
+          },
           "source": {
             "type": "string",
             "description": "How this certificate was obtained (server"

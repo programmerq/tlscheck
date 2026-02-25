@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/pem"
 	"math/big"
 	"testing"
@@ -263,5 +264,51 @@ func TestCertSource(t *testing.T) {
 	info.SetSource(CertSourceReference)
 	if info.Source != CertSourceReference {
 		t.Errorf("Source = %q, want 'reference'", info.Source)
+	}
+}
+
+func TestOIDToString(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    asn1.ObjectIdentifier
+		expected string
+	}{
+		{"single", asn1.ObjectIdentifier{1}, "1"},
+		{"two parts", asn1.ObjectIdentifier{1, 3}, "1.3"},
+		{"teleport cluster", asn1.ObjectIdentifier{1, 3, 9999, 1, 7}, "1.3.9999.1.7"},
+		{"zero component", asn1.ObjectIdentifier{0, 0}, "0.0"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := oidToString(tc.input)
+			if result != tc.expected {
+				t.Errorf("oidToString(%v) = %q, want %q", tc.input, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestTeleportOIDNames(t *testing.T) {
+	t.Parallel()
+
+	// Spot-check a few known Teleport OIDs
+	known := map[string]string{
+		"1.3.9999.1.7": "TeleportCluster",
+		"1.3.9999.1.9": "LoginIP",
+		"1.3.9999.2.3": "DatabaseUsername",
+		"1.3.9999.3.1": "DeviceID",
+	}
+	for oid, want := range known {
+		got, ok := teleportOIDNames[oid]
+		if !ok {
+			t.Errorf("OID %s not found in teleportOIDNames", oid)
+			continue
+		}
+		if got != want {
+			t.Errorf("teleportOIDNames[%s] = %q, want %q", oid, got, want)
+		}
 	}
 }

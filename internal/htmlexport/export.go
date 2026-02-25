@@ -429,9 +429,12 @@ const htmlTemplate = `<!DOCTYPE html>
             <button class="btn btn-secondary" onclick="copyJSON()">Copy to Clipboard</button>
             <span id="copy-feedback" class="copy-feedback">Copied!</span>
         </div>
-        <button class="collapsible">Show/Hide Raw JSON</button>
-        <div class="content">
+        <button id="raw-json-toggle" class="collapsible">Show/Hide Raw JSON</button>
+        <div class="content" id="raw-json-content">
             <pre id="raw-json"></pre>
+            <div style="text-align:right;margin-top:8px">
+                <button class="btn btn-secondary" onclick="scrollToRawJsonTop()">&#8593; Back to top of JSON</button>
+            </div>
         </div>
     </div>
 
@@ -478,6 +481,7 @@ const htmlTemplate = `<!DOCTYPE html>
         function renderSystemInfo() {
             const network = tlsCheckData.network || {};
             const system = network.system || {};
+            const profile = (tlsCheckData.arguments || {}).profile_source;
 
             let html = '<h2>System Information</h2>';
             html += '<p class="section-desc">Details about the machine and environment from which this check was run.</p>';
@@ -491,6 +495,10 @@ const htmlTemplate = `<!DOCTYPE html>
             if (system.captured_at) {
                 html += createMetadataItem('Captured At', new Date(system.captured_at).toLocaleString());
             }
+            // tsh profile - single box when a profile was active
+            if (profile) {
+                html += createMetadataItem('TSH Profile', profile.name || 'N/A');
+            }
             html += '</div>';
             return html;
         }
@@ -498,8 +506,6 @@ const htmlTemplate = `<!DOCTYPE html>
         function renderSummary() {
             const args = tlsCheckData.arguments || {};
             const results = tlsCheckData.results || [];
-            const profile = args.profile_source;
-
             const connectedCount = results.filter(r => !r.failure).length;
             const issuesCount = results.filter(r => r.failure).length;
 
@@ -518,28 +524,6 @@ const htmlTemplate = `<!DOCTYPE html>
                 html += createSummaryCard('Issues Detected', issuesCount.toString(), 'status-failure');
             }
             html += '</div>';
-
-            // tsh profile section (only shown when a profile was active)
-            if (profile) {
-                html += '<h3>tsh Profile</h3>';
-                html += '<p class="section-desc">A local tsh profile was detected and used to populate defaults for this run.</p>';
-                html += '<div class="metadata">';
-                html += createMetadataItem('Profile Name', profile.name || 'N/A');
-                if (profile.path) {
-                    html += createMetadataItem('Profile Path', profile.path);
-                }
-                if (profile.username) {
-                    html += createMetadataItem('Username', profile.username);
-                }
-                const certFoundBadge = profile.client_cert_found
-                    ? '<span class="badge badge-success">Yes</span>'
-                    : '<span class="badge badge-warning">No</span>';
-                html += createMetadataItem('Client Cert Found', certFoundBadge, true);
-                if (profile.client_cert_path) {
-                    html += createMetadataItem('Client Cert Path', profile.client_cert_path);
-                }
-                html += '</div>';
-            }
 
             return html;
         }
@@ -569,7 +553,7 @@ const htmlTemplate = `<!DOCTYPE html>
             html += '</div>';
 
             html += '<table id="results-table"><thead><tr>';
-            html += '<th>Service</th><th>Target</th><th>SNI</th><th>ALPN</th><th>Client Cert</th><th>Behavior</th>';
+            html += '<th>Service</th><th>Target</th><th>SNI</th><th>ALPN</th><th>Behavior</th>';
             html += '</tr></thead><tbody>';
 
             results.forEach(function(result) {
@@ -583,28 +567,24 @@ const htmlTemplate = `<!DOCTYPE html>
                 html += '<td>' + escapeHtml(target.primary_sni || 'N/A') + '</td>';
                 html += '<td>' + escapeHtml((target.alpns || []).join(', ') || 'N/A') + '</td>';
 
-                // Client cert column
-                if (target.use_client_cert === true) {
-                    const fp = result.client_cert_fingerprint;
-                    if (fp && certs[fp]) {
-                        const cert = certs[fp];
-                        const cn = (cert.subject && cert.subject.common_name)
-                            ? cert.subject.common_name
-                            : fp.slice(0, 12) + '\u2026';
-                        html += '<td><a class="cert-link" onclick="jumpToCert(\'' + fp + '\')">' + escapeHtml(cn) + '</a></td>';
-                    } else {
-                        html += '<td><span class="badge badge-info">Used</span></td>';
-                    }
-                } else if (target.use_client_cert === false) {
-                    html += '<td><span style="color:var(--text-subtle);font-size:0.85em">None</span></td>';
-                } else {
-                    html += '<td><span style="color:var(--text-subtle);font-size:0.85em">\u2014</span></td>';
-                }
-
                 if (failure) {
                     html += '<td>';
                     html += '<span class="badge badge-failure">' + escapeHtml(failure.kind || 'unknown') + '</span>';
                     html += '<div style="color:var(--text-muted);font-size:0.88em;margin-top:4px">' + escapeHtml(failure.message || 'N/A') + '</div>';
+                    // Show client cert even on failure if applicable
+                    if (target.use_client_cert === true) {
+                        const fp = result.client_cert_fingerprint;
+                        if (fp && certs[fp]) {
+                            const ccert = certs[fp];
+                            const cn = (ccert.subject && ccert.subject.common_name)
+                                ? ccert.subject.common_name : fp.slice(0, 12) + '\u2026';
+                            html += '<div style="font-size:0.88em;margin-top:4px">Client Cert: <a class="cert-link" onclick="jumpToCert(\'' + fp + '\')">' + escapeHtml(cn) + '</a></div>';
+                        } else {
+                            html += '<div style="font-size:0.88em;margin-top:4px;color:var(--text-muted)">Client Cert: used</div>';
+                        }
+                    } else if (target.use_client_cert === false) {
+                        html += '<div style="font-size:0.88em;margin-top:4px;color:var(--text-subtle)">Client Cert: none</div>';
+                    }
                     html += '</td>';
                 } else {
                     const details = [];
@@ -619,6 +599,20 @@ const htmlTemplate = `<!DOCTYPE html>
                         if (cert && cert.subject && cert.subject.common_name) {
                             details.push('Cert: <a class="cert-link" onclick="jumpToCert(\'' + result.leaf_fingerprint + '\')">' + escapeHtml(cert.subject.common_name) + '</a>');
                         }
+                    }
+                    // Client cert info in Behavior column
+                    if (target.use_client_cert === true) {
+                        const fp = result.client_cert_fingerprint;
+                        if (fp && certs[fp]) {
+                            const ccert = certs[fp];
+                            const cn = (ccert.subject && ccert.subject.common_name)
+                                ? ccert.subject.common_name : fp.slice(0, 12) + '\u2026';
+                            details.push('Client Cert: <a class="cert-link" onclick="jumpToCert(\'' + fp + '\')">' + escapeHtml(cn) + '</a>');
+                        } else {
+                            details.push('Client Cert: used');
+                        }
+                    } else if (target.use_client_cert === false) {
+                        details.push('<span style="color:var(--text-subtle)">Client Cert: none</span>');
                     }
                     html += '<td>';
                     html += details.length > 0
@@ -739,6 +733,18 @@ const htmlTemplate = `<!DOCTYPE html>
 
                 if (cert.serial_number) html += createMetadataItem('Serial Number', cert.serial_number);
 
+                // Render Teleport-specific custom extensions when present
+                if (cert.extensions && cert.extensions.length > 0) {
+                    const tpExts = cert.extensions.filter(function(e) { return e.name; });
+                    if (tpExts.length > 0) {
+                        html += '<div style="grid-column:1/-1;margin-top:4px"><div class="key" style="font-weight:600;color:var(--text-muted);font-size:0.85em;margin-bottom:6px">TELEPORT EXTENSIONS</div><div class="metadata">';
+                        tpExts.forEach(function(ext) {
+                            html += createMetadataItem(ext.name, ext.value);
+                        });
+                        html += '</div></div>';
+                    }
+                }
+
                 html += '</div>';
                 html += '<div class="cert-raw" id="cert-raw-' + fingerprint + '">';
                 html += '<pre>' + escapeHtml(JSON.stringify(cert, null, 2)) + '</pre>';
@@ -841,6 +847,10 @@ const htmlTemplate = `<!DOCTYPE html>
             const feedback = document.getElementById('copy-feedback');
             feedback.classList.add('show');
             setTimeout(function() { feedback.classList.remove('show'); }, 2000);
+        }
+
+        function scrollToRawJsonTop() {
+            document.getElementById('raw-json-toggle').scrollIntoView({behavior: 'smooth', block: 'start'});
         }
 
         function toggleRawCert(fingerprint) {
