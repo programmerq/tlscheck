@@ -163,6 +163,78 @@ func TestWriteHandlesFailures(t *testing.T) {
 	}
 }
 
+func TestWriteShowsTSHProfile(t *testing.T) {
+	exec := runner.Execution{
+		Arguments: &config.Options{
+			PublicAddr:  "teleport.example.com",
+			ClusterName: "test-cluster",
+			ProfileSource: &config.ProfileInfo{
+				Name:            "teleport.example.com",
+				Path:            "/home/user/.tsh",
+				Username:        "alice",
+				ClientCertFound: true,
+			},
+		},
+		Results: []probe.Result{},
+	}
+
+	var buf bytes.Buffer
+	if err := Write(&buf, exec); err != nil {
+		t.Fatalf("Write() returned error: %v", err)
+	}
+
+	html := buf.String()
+	if !strings.Contains(html, "profile_source") {
+		t.Error("HTML output missing profile_source in JSON data")
+	}
+}
+
+func TestWriteShowsClientCertColumn(t *testing.T) {
+	trueVal := true
+	falseVal := false
+	exec := runner.Execution{
+		Arguments: &config.Options{
+			PublicAddr:  "teleport.example.com",
+			ClusterName: "test-cluster",
+		},
+		Results: []probe.Result{
+			{
+				Target: plan.ProbeTarget{
+					ServiceKey:    "proxy_ssh_grpc",
+					Address:       "teleport.example.com",
+					Port:          443,
+					UseClientCert: &trueVal,
+				},
+				Attempt:               1,
+				NegotiatedProtocol:    "teleport-proxy-ssh-grpc",
+				ClientCertFingerprint: "TESTFP001",
+			},
+			{
+				Target: plan.ProbeTarget{
+					ServiceKey:    "auth_via_proxy",
+					Address:       "teleport.example.com",
+					Port:          443,
+					UseClientCert: &falseVal,
+				},
+				Attempt: 1,
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := Write(&buf, exec); err != nil {
+		t.Fatalf("Write() returned error: %v", err)
+	}
+
+	html := buf.String()
+	if !strings.Contains(html, "Client Cert") {
+		t.Error("HTML output missing Client Cert column header")
+	}
+	if !strings.Contains(html, "use_client_cert") {
+		t.Error("HTML output missing use_client_cert in JSON data")
+	}
+}
+
 func TestWriteSelfContained(t *testing.T) {
 	exec := runner.Execution{
 		Arguments: &config.Options{
