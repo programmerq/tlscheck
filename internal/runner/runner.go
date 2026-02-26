@@ -97,6 +97,16 @@ func Execute(ctx context.Context, opts config.Options, builder PlanBuilder, engi
 		}
 	}
 
+	// Parse the HostCA PEM bundle and add any discovered CA certificates
+	if len(opts.HostCAPEM) > 0 {
+		hostCACerts := probe.ParseCertBundleFromPEM(opts.HostCAPEM, probe.CertSourceHostCA)
+		for fp, info := range hostCACerts {
+			if _, exists := allCerts[fp]; !exists {
+				allCerts[fp] = info
+			}
+		}
+	}
+
 	if len(allCerts) > 0 {
 		exec.Certs = allCerts
 	}

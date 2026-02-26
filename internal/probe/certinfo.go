@@ -159,6 +159,8 @@ const (
 	CertSourceClient CertSource = "client"
 	// CertSourceReference indicates a reference certificate (e.g., Let's Encrypt).
 	CertSourceReference CertSource = "reference"
+	// CertSourceHostCA indicates a CA certificate fetched from the Teleport /webapi/auth/export endpoint.
+	CertSourceHostCA CertSource = "host_ca"
 )
 
 // CertTrustInfo contains information about certificate trust status.
@@ -382,4 +384,32 @@ func (c *CertInfo) SetIssuerFingerprint(fingerprint string) {
 // SetSource sets the source on a CertInfo.
 func (c *CertInfo) SetSource(source CertSource) {
 	c.Source = source
+}
+
+// ParseCertBundleFromPEM parses all PEM-encoded certificates from a bundle and returns
+// a map of fingerprint -> CertInfo. Each certificate is tagged with the given source.
+// Invalid PEM blocks and certificates that cannot be parsed are silently skipped.
+// Returns an empty (non-nil) map if no valid certificates are found.
+func ParseCertBundleFromPEM(pemData []byte, source CertSource) map[string]*CertInfo {
+	result := make(map[string]*CertInfo)
+	rest := pemData
+	for len(rest) > 0 {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			continue
+		}
+		pemStr := string(pem.EncodeToMemory(block))
+		info := ParseCertInfo(cert, pemStr)
+		info.SetSource(source)
+		result[info.Fingerprint] = info
+	}
+	return result
 }
