@@ -97,6 +97,17 @@ func Execute(ctx context.Context, opts config.Options, builder PlanBuilder, engi
 		}
 	}
 
+	// Parse the ClientCertPEM directly so the client cert always appears in exec.Certs
+	// even when SetClientCert fails silently (e.g. non-CERTIFICATE first PEM block).
+	if len(opts.ClientCertPEM) > 0 {
+		clientPEMCerts := probe.ParseCertBundleFromPEM(opts.ClientCertPEM, probe.CertSourceClient)
+		for fp, info := range clientPEMCerts {
+			if _, exists := allCerts[fp]; !exists {
+				allCerts[fp] = info
+			}
+		}
+	}
+
 	// Parse the HostCA PEM bundle and add any discovered CA certificates
 	if len(opts.HostCAPEM) > 0 {
 		hostCACerts := probe.ParseCertBundleFromPEM(opts.HostCAPEM, probe.CertSourceHostCA)
