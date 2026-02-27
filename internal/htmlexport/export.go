@@ -380,7 +380,7 @@ const htmlTemplate = `<!DOCTYPE html>
         .metadata { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; margin: 12px 0; }
         .metadata-item { padding: 8px 12px; background: var(--bg-card); border-radius: 4px; border: 1px solid var(--border); }
         .metadata-item .key { font-weight: 600; color: var(--text-muted); font-size: 0.85em; }
-        .metadata-item .value { color: var(--text-main); margin-top: 3px; font-size: 0.95em; }
+        .metadata-item .value { color: var(--text-main); margin-top: 3px; font-size: 0.95em; overflow-wrap: anywhere; word-break: normal; }
 
         .cert-link { color: var(--accent); text-decoration: none; cursor: pointer; }
         .cert-link:hover { text-decoration: underline; }

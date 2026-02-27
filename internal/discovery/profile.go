@@ -274,9 +274,9 @@ func GetClientCertPaths(home, profileName, username string) (certPath, keyPath s
 	}
 
 	// Teleport 17+ format (preferred)
-	// cert: ~/.tsh/keys/{profile}/{username}.pub
+	// cert: ~/.tsh/keys/{profile}/{username}.crt
 	// key: ~/.tsh/keys/{profile}/{username}.key
-	certPath = filepath.Join(home, "keys", profileName, fmt.Sprintf("%s.pub", username))
+	certPath = filepath.Join(home, "keys", profileName, fmt.Sprintf("%s.crt", username))
 	keyPath = filepath.Join(home, "keys", profileName, fmt.Sprintf("%s.key", username))
 	return certPath, keyPath
 }

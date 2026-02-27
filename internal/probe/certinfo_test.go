@@ -265,6 +265,67 @@ func TestCertSource(t *testing.T) {
 	if info.Source != CertSourceReference {
 		t.Errorf("Source = %q, want 'reference'", info.Source)
 	}
+
+	info.SetSource(CertSourceHostCA)
+	if info.Source != CertSourceHostCA {
+		t.Errorf("Source = %q, want 'host_ca'", info.Source)
+	}
+}
+
+func TestParseCertBundleFromPEM(t *testing.T) {
+	t.Parallel()
+
+	// Build two self-signed CA certificates and combine them into a bundle.
+	mkCA := func(cn string) []byte {
+		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			t.Fatalf("generate key: %v", err)
+		}
+		tmpl := &x509.Certificate{
+			SerialNumber:          big.NewInt(1),
+			Subject:               pkix.Name{CommonName: cn},
+			NotBefore:             time.Now().Add(-time.Hour),
+			NotAfter:              time.Now().Add(24 * time.Hour),
+			IsCA:                  true,
+			BasicConstraintsValid: true,
+		}
+		der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+		if err != nil {
+			t.Fatalf("create cert: %v", err)
+		}
+		return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	}
+
+	pem1 := mkCA("CA One")
+	pem2 := mkCA("CA Two")
+	bundle := append(pem1, pem2...)
+
+	certs := ParseCertBundleFromPEM(bundle, CertSourceHostCA)
+	if len(certs) != 2 {
+		t.Fatalf("ParseCertBundleFromPEM: got %d certs, want 2", len(certs))
+	}
+	for fp, info := range certs {
+		if info.Source != CertSourceHostCA {
+			t.Errorf("cert %s: source = %q, want 'host_ca'", fp, info.Source)
+		}
+		if fp != info.Fingerprint {
+			t.Errorf("map key %s does not match Fingerprint %s", fp, info.Fingerprint)
+		}
+	}
+}
+
+func TestParseCertBundleFromPEM_Empty(t *testing.T) {
+	t.Parallel()
+
+	certs := ParseCertBundleFromPEM(nil, CertSourceHostCA)
+	if len(certs) != 0 {
+		t.Errorf("expected empty map for nil input, got %d entries", len(certs))
+	}
+
+	certs = ParseCertBundleFromPEM([]byte("not a cert"), CertSourceHostCA)
+	if len(certs) != 0 {
+		t.Errorf("expected empty map for invalid PEM, got %d entries", len(certs))
+	}
 }
 
 func TestOIDToString(t *testing.T) {

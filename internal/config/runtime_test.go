@@ -219,7 +219,7 @@ cluster: root.example.com
 	}
 
 	// Use Teleport 17+ format
-	certPath := filepath.Join(keysDir, profileName+".pub")
+	certPath := filepath.Join(keysDir, profileName+".crt")
 	keyPath := filepath.Join(keysDir, profileName+".key")
 	if err := os.WriteFile(certPath, testCertPEM, 0o600); err != nil {
 		t.Fatalf("write cert: %v", err)

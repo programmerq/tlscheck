@@ -259,6 +259,80 @@ func TestExecuteClientCertificateCollection(t *testing.T) {
 	}
 }
 
+func TestExecuteHostCACertCollection(t *testing.T) {
+	t.Parallel()
+
+	// Generate a CA certificate and encode it as PEM.
+	certPEM, _, err := discovery.GenerateTestCertificate()
+	if err != nil {
+		t.Fatalf("generate test cert: %v", err)
+	}
+
+	opts := config.Options{
+		PublicAddr: "proxy.example.com",
+		HostCAPEM:  certPEM,
+	}
+	builder := &stubBuilder{plan: plan.Plan{}}
+	engine := &stubEngine{}
+
+	exec, err := Execute(context.Background(), opts, builder, engine)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if len(exec.Certs) == 0 {
+		t.Fatal("expected Certs to include HostCA cert, got empty map")
+	}
+
+	for fp, info := range exec.Certs {
+		if info.Source != probe.CertSourceHostCA {
+			t.Errorf("cert %s: source = %q, want 'host_ca'", fp, info.Source)
+		}
+	}
+}
+
+func TestExecuteHostCACertDoesNotOverwriteServerCert(t *testing.T) {
+	t.Parallel()
+
+	// Use a cert as both a "server cert" (via the engine) and as a HostCA cert.
+	// When fingerprints collide the server cert (set first) should win.
+	certPEM, _, err := discovery.GenerateTestCertificate()
+	if err != nil {
+		t.Fatalf("generate test cert: %v", err)
+	}
+
+	// Parse the fingerprint from the PEM so we can create a matching stub cert.
+	serverCerts := probe.ParseCertBundleFromPEM(certPEM, probe.CertSourceServer)
+	if len(serverCerts) != 1 {
+		t.Fatalf("expected 1 cert from PEM, got %d", len(serverCerts))
+	}
+	var fp string
+	var serverInfo *probe.CertInfo
+	for k, v := range serverCerts {
+		fp = k
+		serverInfo = v
+	}
+
+	opts := config.Options{
+		PublicAddr: "proxy.example.com",
+		HostCAPEM:  certPEM,
+	}
+	builder := &stubBuilder{plan: plan.Plan{}}
+	engine := &stubEngineWithCerts{
+		stubEngine: stubEngine{},
+		certs:      map[string]*probe.CertInfo{fp: serverInfo},
+	}
+
+	exec, err := Execute(context.Background(), opts, builder, engine)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if exec.Certs[fp].Source != probe.CertSourceServer {
+		t.Errorf("expected server cert source to win, got %q", exec.Certs[fp].Source)
+	}
+}
+
 func TestRealEngineWithClientCert(t *testing.T) {
 	// Generate a test certificate
 	certPEM, keyPEM, err := discovery.GenerateTestCertificate()
