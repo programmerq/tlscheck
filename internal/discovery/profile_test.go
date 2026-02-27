@@ -143,7 +143,7 @@ func TestLoadClientCert(t *testing.T) {
 		}
 
 		// Use Teleport 17+ format
-		certPath := filepath.Join(keysDir, username+".pub")
+		certPath := filepath.Join(keysDir, username+".crt")
 		keyPath := filepath.Join(keysDir, username+".key")
 
 		if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
@@ -270,7 +270,7 @@ func TestLoadClientCert(t *testing.T) {
 		}
 
 		// Use Teleport 17+ format with profile name for files when username is empty
-		certPath := filepath.Join(keysDir, profileName+".pub")
+		certPath := filepath.Join(keysDir, profileName+".crt")
 		keyPath := filepath.Join(keysDir, profileName+".key")
 
 		if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
