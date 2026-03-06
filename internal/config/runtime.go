@@ -81,6 +81,32 @@ func ResolveRuntime(ctx context.Context, opts Options) (Options, error) {
 				Extensions:     extensions,
 			}
 		}
+
+		// Load extra headers from ~/.tsh/config.yaml and apply headers that
+		// match the target proxy address.  Headers supplied via --extra-headers
+		// take precedence over those loaded from the config file.
+		tshCfg, cfgErr := discovery.LoadTSHConfig(home)
+		if cfgErr != nil {
+			log.Printf("warning: could not load tsh config.yaml: %v", cfgErr)
+		} else if len(tshCfg.AddHeaders) > 0 {
+			proxyAddr := resolved.PublicAddr
+			if proxyAddr == "" {
+				proxyAddr = profile.PublicAddr
+			}
+			matching := tshCfg.MatchingHeaders(proxyAddr)
+			if len(matching) > 0 {
+				log.Printf("loaded %d extra header(s) from ~/.tsh/config.yaml for proxy %s", len(matching), proxyAddr)
+				// Merge: CLI-provided headers take precedence over config-file headers.
+				merged := make(map[string]string)
+				for k, v := range matching {
+					merged[k] = v
+				}
+				for k, v := range resolved.ExtraHeaders {
+					merged[k] = v
+				}
+				resolved.ExtraHeaders = merged
+			}
+		}
 	} else if resolved.PublicAddr == "" {
 		if errors.Is(profileErr, discovery.ErrNoActiveProfile) {
 			return Options{}, ErrProxyServerRequired

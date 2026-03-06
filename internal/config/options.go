@@ -16,22 +16,23 @@ const (
 
 // Options captures runtime inputs supplied via the CLI.
 type Options struct {
-	PublicAddr        string          `json:"public_addr" jsonschema:"description=Public DNS name or IP address of the Teleport proxy server"`
-	ClusterName       string          `json:"cluster_name" jsonschema:"description=Teleport cluster name as reported by /webapi/ping"`
-	TeleportVersion   string          `json:"teleport_version" jsonschema:"description=Semantic version of the Teleport cluster (e.g. v18.0.0)"`
-	WebProxyPort      int             `json:"web_proxy_port,omitempty" jsonschema:"description=TCP port number for the Teleport proxy web listener (typically 443 or 3080)"`
-	TLSRoutingEnabled bool            `json:"tls_routing_enabled" jsonschema:"description=Whether TLS routing is enabled on the Teleport cluster (multiplexes all services on one port)"`
-	Repeat            int             `json:"repeat" jsonschema:"description=Number of probe attempts to execute per target combination"`
-	ServiceFilter     []string        `json:"service_filter,omitempty" jsonschema:"description=Optional list of service keys to probe (e.g. proxy_web, proxy_ssh). When empty, all services are probed"`
-	IPAddresses       []string        `json:"ip_addresses,omitempty" jsonschema:"description=Optional list of specific IP addresses to probe instead of DNS resolution"`
-	OutputFormat      string          `json:"output_format,omitempty" jsonschema:"description=Output format: json (default) or html"`
-	Verbose           bool            `json:"verbose,omitempty" jsonschema:"description=Enable verbose logging to stderr for debugging"`
-	Proxy             ProxySettings   `json:"proxy" jsonschema:"description=HTTP/HTTPS proxy configuration detected from environment variables"`
-	ProfileSource     *ProfileInfo    `json:"profile_source,omitempty" jsonschema:"description=Information about the tsh profile used to populate default values"`
-	ClientCert        *ClientCertInfo `json:"-"` // Client cert info moved to top-level client_certs
-	HostCAPEM         []byte          `json:"-"`
-	ClientCertPEM     []byte          `json:"-"`
-	ClientKeyPEM      []byte          `json:"-"`
+	PublicAddr        string            `json:"public_addr" jsonschema:"description=Public DNS name or IP address of the Teleport proxy server"`
+	ClusterName       string            `json:"cluster_name" jsonschema:"description=Teleport cluster name as reported by /webapi/ping"`
+	TeleportVersion   string            `json:"teleport_version" jsonschema:"description=Semantic version of the Teleport cluster (e.g. v18.0.0)"`
+	WebProxyPort      int               `json:"web_proxy_port,omitempty" jsonschema:"description=TCP port number for the Teleport proxy web listener (typically 443 or 3080)"`
+	TLSRoutingEnabled bool              `json:"tls_routing_enabled" jsonschema:"description=Whether TLS routing is enabled on the Teleport cluster (multiplexes all services on one port)"`
+	Repeat            int               `json:"repeat" jsonschema:"description=Number of probe attempts to execute per target combination"`
+	ServiceFilter     []string          `json:"service_filter,omitempty" jsonschema:"description=Optional list of service keys to probe (e.g. proxy_web, proxy_ssh). When empty, all services are probed"`
+	IPAddresses       []string          `json:"ip_addresses,omitempty" jsonschema:"description=Optional list of specific IP addresses to probe instead of DNS resolution"`
+	ExtraHeaders      map[string]string `json:"extra_headers,omitempty" jsonschema:"description=Extra HTTP headers to inject when connecting (e.g. Authorization). Each test runs both with and without these headers. Loaded from ~/.tsh/config.yaml add_headers or --extra-headers flag"`
+	OutputFormat      string            `json:"output_format,omitempty" jsonschema:"description=Output format: json (default) or html"`
+	Verbose           bool              `json:"verbose,omitempty" jsonschema:"description=Enable verbose logging to stderr for debugging"`
+	Proxy             ProxySettings     `json:"proxy" jsonschema:"description=HTTP/HTTPS proxy configuration detected from environment variables"`
+	ProfileSource     *ProfileInfo      `json:"profile_source,omitempty" jsonschema:"description=Information about the tsh profile used to populate default values"`
+	ClientCert        *ClientCertInfo   `json:"-"` // Client cert info moved to top-level client_certs
+	HostCAPEM         []byte            `json:"-"`
+	ClientCertPEM     []byte            `json:"-"`
+	ClientKeyPEM      []byte            `json:"-"`
 }
 
 // ProxySettings captures HTTP(S) proxy configuration sourced from the environment.
@@ -103,12 +104,14 @@ func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 	var opts Options
 	var services string
 	var ipAddresses string
+	var extraHeaders string
 	var showVersion bool
 
 	fs.StringVar(&opts.PublicAddr, "proxy-server", "", "Teleport proxy public address (DNS name)")
 	fs.IntVar(&opts.Repeat, "repeat", 1, "Attempts per SNI/ALPN/IP combination (default 1)")
 	fs.StringVar(&services, "services", "all", servicesHelp)
 	fs.StringVar(&ipAddresses, "ip-addresses", "", "Comma-separated list of IP addresses to use instead of DNS resolution")
+	fs.StringVar(&extraHeaders, "extra-headers", "", `Comma-separated extra HTTP headers to inject (format: "Name: Value,Name2: Value2"). Each probe runs both with and without these headers.`)
 	fs.StringVar(&opts.OutputFormat, "output-format", OutputFormatJSON, fmt.Sprintf("Output format: %s or %s", OutputFormatJSON, OutputFormatHTML))
 	fs.BoolVar(&opts.Verbose, "verbose", false, "Enable verbose logging to stderr for debugging")
 	fs.BoolVar(&showVersion, "version", false, "Print tlscheck version and exit")
@@ -121,6 +124,7 @@ func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 		fmt.Fprintf(fs.Output(), "  --repeat int\n\tAttempts per SNI/ALPN/IP combination (default 1)\n")
 		fmt.Fprintf(fs.Output(), "  --services string\n\t%s\n", servicesHelp)
 		fmt.Fprintf(fs.Output(), "  --ip-addresses string\n\tComma-separated list of IP addresses to use instead of DNS resolution\n")
+		fmt.Fprintf(fs.Output(), "  --extra-headers string\n\tComma-separated extra HTTP headers (format: \"Name: Value,Name2: Value2\"). Each probe runs both with and without these headers.\n")
 		fmt.Fprintf(fs.Output(), "  --output-format string\n\tOutput format: json (default) or html\n")
 		fmt.Fprintf(fs.Output(), "  --verbose\n\tEnable verbose logging to stderr for debugging\n")
 		fmt.Fprintf(fs.Output(), "  -v, --version\n\tPrint tlscheck version and exit\n")
@@ -149,6 +153,15 @@ func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 	ipAddresses = strings.TrimSpace(ipAddresses)
 	if ipAddresses != "" {
 		opts.IPAddresses = splitList(ipAddresses, false)
+	}
+
+	extraHeaders = strings.TrimSpace(extraHeaders)
+	if extraHeaders != "" {
+		parsed, err := parseHeaders(extraHeaders)
+		if err != nil {
+			return Options{}, false, fmt.Errorf("invalid --extra-headers: %w", err)
+		}
+		opts.ExtraHeaders = parsed
 	}
 
 	opts.Proxy = detectProxySettings()
@@ -205,4 +218,31 @@ func (o Options) WantsService(key string) bool {
 		}
 	}
 	return false
+}
+
+// parseHeaders parses a comma-separated list of "Name: Value" header pairs.
+// Each entry must contain at least one colon; the header name is everything
+// before the first colon and the value is everything after (whitespace trimmed).
+func parseHeaders(input string) (map[string]string, error) {
+	result := make(map[string]string)
+	for _, entry := range strings.Split(input, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		idx := strings.IndexByte(entry, ':')
+		if idx < 0 {
+			return nil, fmt.Errorf("header %q is missing a colon separator", entry)
+		}
+		name := strings.TrimSpace(entry[:idx])
+		value := strings.TrimSpace(entry[idx+1:])
+		if name == "" {
+			return nil, fmt.Errorf("empty header name in %q", entry)
+		}
+		result[name] = value
+	}
+	if len(result) == 0 {
+		return nil, nil
+	}
+	return result, nil
 }

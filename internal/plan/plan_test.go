@@ -728,3 +728,141 @@ func TestBuildIncludesDNSResolution(t *testing.T) {
 		t.Error("Expected at least one target to have DNS resolved IPs")
 	}
 }
+
+func TestBuildDuplicatesTargetsWhenExtraHeadersConfigured(t *testing.T) {
+	t.Parallel()
+
+	baseOpts := config.Options{
+		PublicAddr:        "cluster.example.com",
+		ClusterName:       "example",
+		TeleportVersion:   "v18.0.0",
+		Repeat:            1,
+		WebProxyPort:      443,
+		TLSRoutingEnabled: true,
+		ServiceFilter:     []string{"proxy_web"},
+	}
+
+	// Build without headers to get the baseline count
+	planWithout, err := Build(baseOpts)
+	if err != nil {
+		t.Fatalf("Build without headers returned error: %v", err)
+	}
+	baselineCount := len(planWithout.Targets)
+	if baselineCount == 0 {
+		t.Fatal("expected at least one baseline target")
+	}
+
+	// Build with extra headers
+	optsWithHeaders := baseOpts
+	optsWithHeaders.ExtraHeaders = map[string]string{
+		"Authorization": "Bearer tokentoken",
+	}
+	planWith, err := Build(optsWithHeaders)
+	if err != nil {
+		t.Fatalf("Build with headers returned error: %v", err)
+	}
+
+	// Should have 2x targets (without headers + with headers)
+	expected := baselineCount * 2
+	if len(planWith.Targets) != expected {
+		t.Fatalf("expected %d targets with extra headers (double), got %d", expected, len(planWith.Targets))
+	}
+
+	// Verify pairs: first target has no extra headers, second has them
+	var withHeadersCount, withoutHeadersCount int
+	for _, target := range planWith.Targets {
+		if len(target.ExtraHeaders) > 0 {
+			withHeadersCount++
+			if v := target.ExtraHeaders["Authorization"]; v != "Bearer tokentoken" {
+				t.Errorf("Authorization header = %q, want %q", v, "Bearer tokentoken")
+			}
+			foundNote := false
+			for _, note := range target.Notes {
+				if strings.Contains(note, "With extra headers") {
+					foundNote = true
+					break
+				}
+			}
+			if !foundNote {
+				t.Errorf("target with extra headers missing 'With extra headers' note, notes: %v", target.Notes)
+			}
+		} else {
+			withoutHeadersCount++
+			foundNote := false
+			for _, note := range target.Notes {
+				if strings.Contains(note, "Without extra headers") {
+					foundNote = true
+					break
+				}
+			}
+			if !foundNote {
+				t.Errorf("target without extra headers missing 'Without extra headers' note, notes: %v", target.Notes)
+			}
+		}
+	}
+
+	if withHeadersCount != baselineCount {
+		t.Errorf("expected %d targets with headers, got %d", baselineCount, withHeadersCount)
+	}
+	if withoutHeadersCount != baselineCount {
+		t.Errorf("expected %d targets without headers, got %d", baselineCount, withoutHeadersCount)
+	}
+}
+
+func TestBuildNoHeadersDuplicationWithoutExtraHeaders(t *testing.T) {
+	t.Parallel()
+
+	opts := config.Options{
+		PublicAddr:        "cluster.example.com",
+		ClusterName:       "example",
+		TeleportVersion:   "v18.0.0",
+		Repeat:            1,
+		WebProxyPort:      443,
+		TLSRoutingEnabled: true,
+		ServiceFilter:     []string{"proxy_web"},
+	}
+
+	p, err := Build(opts)
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	// Should have exactly 1 target since no extra headers are configured
+	if len(p.Targets) != 1 {
+		t.Fatalf("expected 1 target without extra headers, got %d", len(p.Targets))
+	}
+	if len(p.Targets[0].ExtraHeaders) != 0 {
+		t.Errorf("expected no ExtraHeaders on target, got %v", p.Targets[0].ExtraHeaders)
+	}
+}
+
+func TestBuildExtraHeadersAndProxyCombined(t *testing.T) {
+	t.Parallel()
+
+	opts := config.Options{
+		PublicAddr:        "cluster.example.com",
+		ClusterName:       "example",
+		TeleportVersion:   "v18.0.0",
+		Repeat:            1,
+		WebProxyPort:      443,
+		TLSRoutingEnabled: true,
+		ServiceFilter:     []string{"proxy_web"},
+		Proxy: config.ProxySettings{
+			HTTPSProxy: "http://proxy.example.com:8080",
+		},
+		ExtraHeaders: map[string]string{
+			"Authorization": "Bearer abc",
+		},
+	}
+
+	p, err := Build(opts)
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	// Each target first gets duplicated for proxy (×2), then for headers (×2) = 4 total
+	// for 1 baseline target.
+	if len(p.Targets) != 4 {
+		t.Fatalf("expected 4 targets (proxy × headers), got %d", len(p.Targets))
+	}
+}

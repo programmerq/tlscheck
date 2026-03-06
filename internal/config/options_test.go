@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestSplitCSV(t *testing.T) {
 	t.Parallel()
@@ -98,6 +101,134 @@ func TestParseArgsWithIPAddresses(t *testing.T) {
 				if opts.IPAddresses[i] != ip {
 					t.Fatalf("IPAddresses[%d] = %q, want %q", i, opts.IPAddresses[i], ip)
 				}
+			}
+		})
+	}
+}
+
+func TestParseArgsExtraHeaders(t *testing.T) {
+	// Not parallel because ParseArgs sets a global usage variable.
+
+	cases := []struct {
+		name    string
+		args    []string
+		want    map[string]string
+		wantErr bool
+	}{
+		{
+			name: "single header",
+			args: []string{"--proxy-server", "example.com", "--extra-headers", "Authorization: Bearer token123"},
+			want: map[string]string{"Authorization": "Bearer token123"},
+		},
+		{
+			name: "multiple headers",
+			args: []string{"--proxy-server", "example.com", "--extra-headers", "Authorization: Bearer abc,X-Custom: val"},
+			want: map[string]string{"Authorization": "Bearer abc", "X-Custom": "val"},
+		},
+		{
+			name: "headers with spaces around separator",
+			args: []string{"--proxy-server", "example.com", "--extra-headers", "  X-Foo : bar  "},
+			want: map[string]string{"X-Foo": "bar"},
+		},
+		{
+			name: "no extra headers",
+			args: []string{"--proxy-server", "example.com"},
+			want: nil,
+		},
+		{
+			name:    "missing colon in header",
+			args:    []string{"--proxy-server", "example.com", "--extra-headers", "Authorization"},
+			wantErr: true,
+		},
+		{
+			name:    "empty header name",
+			args:    []string{"--proxy-server", "example.com", "--extra-headers", ": value"},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			opts, _, err := ParseArgs(tc.args, []string{"proxy_web"})
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error but got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ParseArgs() error = %v", err)
+			}
+			if !reflect.DeepEqual(opts.ExtraHeaders, tc.want) {
+				t.Fatalf("ExtraHeaders = %v, want %v", opts.ExtraHeaders, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseHeaders(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		input   string
+		want    map[string]string
+		wantErr bool
+	}{
+		{
+			name:  "single header with space",
+			input: "Authorization: Bearer token",
+			want:  map[string]string{"Authorization": "Bearer token"},
+		},
+		{
+			name:  "multiple headers comma separated",
+			input: "Authorization: Bearer token,X-Custom: value",
+			want:  map[string]string{"Authorization": "Bearer token", "X-Custom": "value"},
+		},
+		{
+			name:  "whitespace trimmed",
+			input: "  Foo : bar  ",
+			want:  map[string]string{"Foo": "bar"},
+		},
+		{
+			name:  "empty entries skipped",
+			input: "Authorization: token,,X-Custom: val,",
+			want:  map[string]string{"Authorization": "token", "X-Custom": "val"},
+		},
+		{
+			name:    "missing colon",
+			input:   "Authorization",
+			wantErr: true,
+		},
+		{
+			name:    "empty header name",
+			input:   ": value",
+			wantErr: true,
+		},
+		{
+			name:  "empty input returns nil",
+			input: "",
+			want:  nil,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := parseHeaders(tc.input)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error but got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseHeaders() error = %v", err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("parseHeaders(%q) = %v, want %v", tc.input, got, tc.want)
 			}
 		})
 	}
