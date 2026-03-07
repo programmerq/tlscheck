@@ -24,7 +24,7 @@ type Options struct {
 	Repeat            int               `json:"repeat" jsonschema:"description=Number of probe attempts to execute per target combination"`
 	ServiceFilter     []string          `json:"service_filter,omitempty" jsonschema:"description=Optional list of service keys to probe (e.g. proxy_web, proxy_ssh). When empty, all services are probed"`
 	IPAddresses       []string          `json:"ip_addresses,omitempty" jsonschema:"description=Optional list of specific IP addresses to probe instead of DNS resolution"`
-	ExtraHeaders      map[string]string `json:"extra_headers,omitempty" jsonschema:"description=Extra HTTP headers to inject when connecting (e.g. Authorization). Each test runs both with and without these headers. Loaded from ~/.tsh/config.yaml add_headers or --extra-headers flag"`
+	ExtraHeaders      map[string]string `json:"extra_headers,omitempty" jsonschema:"description=Extra HTTP headers to inject when connecting (e.g. Authorization). Each test runs both with and without these headers. Loaded from ~/.tsh/config.yaml add_headers or -H/--header flag"`
 	OutputFormat      string            `json:"output_format,omitempty" jsonschema:"description=Output format: json (default) or html"`
 	Verbose           bool              `json:"verbose,omitempty" jsonschema:"description=Enable verbose logging to stderr for debugging"`
 	Proxy             ProxySettings     `json:"proxy" jsonschema:"description=HTTP/HTTPS proxy configuration detected from environment variables"`
@@ -90,6 +90,75 @@ func Usage() {
 	}
 }
 
+// headerFlag is a repeatable flag.Value that accumulates "Name: Value" header
+// pairs across multiple flag invocations.  It mirrors curl's -H behaviour:
+//   - Each invocation adds one header: -H "Authorization: Bearer token"
+//   - Passing @filename reads one header per non-blank, non-comment line.
+type headerFlag struct {
+	headers map[string]string
+}
+
+// String returns a display representation of the accumulated headers.
+func (h *headerFlag) String() string {
+	if h == nil || len(h.headers) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(h.headers))
+	for k := range h.headers {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, k+": "+h.headers[k])
+	}
+	return strings.Join(parts, ", ")
+}
+
+// Set processes a single flag value.  If val starts with '@', the rest is
+// treated as a path to a file containing one header per line.  Otherwise val
+// must be in "Name: Value" format.
+func (h *headerFlag) Set(val string) error {
+	if strings.HasPrefix(val, "@") {
+		return h.loadFromFile(strings.TrimPrefix(val, "@"))
+	}
+	return h.parseOne(val)
+}
+
+func (h *headerFlag) parseOne(val string) error {
+	idx := strings.IndexByte(val, ':')
+	if idx < 0 {
+		return fmt.Errorf("header %q is missing a colon separator (expected \"Name: Value\")", val)
+	}
+	name := strings.TrimSpace(val[:idx])
+	value := strings.TrimSpace(val[idx+1:])
+	if name == "" {
+		return fmt.Errorf("empty header name in %q", val)
+	}
+	if h.headers == nil {
+		h.headers = make(map[string]string)
+	}
+	h.headers[name] = value
+	return nil
+}
+
+func (h *headerFlag) loadFromFile(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("reading header file %q: %w", path, err)
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if err := h.parseOne(line); err != nil {
+			return fmt.Errorf("in file %q: %w", path, err)
+		}
+	}
+	return nil
+}
+
 // ParseArgs converts CLI arguments into strongly-typed options.
 func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 	fs := flag.NewFlagSet("tlscheck", flag.ContinueOnError)
@@ -104,14 +173,17 @@ func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 	var opts Options
 	var services string
 	var ipAddresses string
-	var extraHeaders string
+	var headerFlagVal headerFlag
 	var showVersion bool
 
 	fs.StringVar(&opts.PublicAddr, "proxy-server", "", "Teleport proxy public address (DNS name)")
 	fs.IntVar(&opts.Repeat, "repeat", 1, "Attempts per SNI/ALPN/IP combination (default 1)")
 	fs.StringVar(&services, "services", "all", servicesHelp)
 	fs.StringVar(&ipAddresses, "ip-addresses", "", "Comma-separated list of IP addresses to use instead of DNS resolution")
-	fs.StringVar(&extraHeaders, "extra-headers", "", `Comma-separated extra HTTP headers to inject (format: "Name: Value,Name2: Value2"). Each probe runs both with and without these headers.`)
+	// -H and --header are aliases, both pointing at the same headerFlag value.
+	const headerUsage = `Add an extra HTTP header (format: "Name: Value"). May be repeated. Use @filename to load headers from a file. Each probe runs both with and without these headers.`
+	fs.Var(&headerFlagVal, "H", headerUsage)
+	fs.Var(&headerFlagVal, "header", headerUsage)
 	fs.StringVar(&opts.OutputFormat, "output-format", OutputFormatJSON, fmt.Sprintf("Output format: %s or %s", OutputFormatJSON, OutputFormatHTML))
 	fs.BoolVar(&opts.Verbose, "verbose", false, "Enable verbose logging to stderr for debugging")
 	fs.BoolVar(&showVersion, "version", false, "Print tlscheck version and exit")
@@ -124,7 +196,7 @@ func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 		fmt.Fprintf(fs.Output(), "  --repeat int\n\tAttempts per SNI/ALPN/IP combination (default 1)\n")
 		fmt.Fprintf(fs.Output(), "  --services string\n\t%s\n", servicesHelp)
 		fmt.Fprintf(fs.Output(), "  --ip-addresses string\n\tComma-separated list of IP addresses to use instead of DNS resolution\n")
-		fmt.Fprintf(fs.Output(), "  --extra-headers string\n\tComma-separated extra HTTP headers (format: \"Name: Value,Name2: Value2\"). Each probe runs both with and without these headers.\n")
+		fmt.Fprintf(fs.Output(), "  -H / --header \"Name: Value\"\n\tAdd an extra HTTP header. May be repeated. Use @filename to load from file.\n\tEach probe runs both with and without these headers.\n")
 		fmt.Fprintf(fs.Output(), "  --output-format string\n\tOutput format: json (default) or html\n")
 		fmt.Fprintf(fs.Output(), "  --verbose\n\tEnable verbose logging to stderr for debugging\n")
 		fmt.Fprintf(fs.Output(), "  -v, --version\n\tPrint tlscheck version and exit\n")
@@ -155,13 +227,8 @@ func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 		opts.IPAddresses = splitList(ipAddresses, false)
 	}
 
-	extraHeaders = strings.TrimSpace(extraHeaders)
-	if extraHeaders != "" {
-		parsed, err := parseHeaders(extraHeaders)
-		if err != nil {
-			return Options{}, false, fmt.Errorf("invalid --extra-headers: %w", err)
-		}
-		opts.ExtraHeaders = parsed
+	if len(headerFlagVal.headers) > 0 {
+		opts.ExtraHeaders = headerFlagVal.headers
 	}
 
 	opts.Proxy = detectProxySettings()
@@ -218,31 +285,4 @@ func (o Options) WantsService(key string) bool {
 		}
 	}
 	return false
-}
-
-// parseHeaders parses a comma-separated list of "Name: Value" header pairs.
-// Each entry must contain at least one colon; the header name is everything
-// before the first colon and the value is everything after (whitespace trimmed).
-func parseHeaders(input string) (map[string]string, error) {
-	result := make(map[string]string)
-	for _, entry := range strings.Split(input, ",") {
-		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			continue
-		}
-		idx := strings.IndexByte(entry, ':')
-		if idx < 0 {
-			return nil, fmt.Errorf("header %q is missing a colon separator", entry)
-		}
-		name := strings.TrimSpace(entry[:idx])
-		value := strings.TrimSpace(entry[idx+1:])
-		if name == "" {
-			return nil, fmt.Errorf("empty header name in %q", entry)
-		}
-		result[name] = value
-	}
-	if len(result) == 0 {
-		return nil, nil
-	}
-	return result, nil
 }

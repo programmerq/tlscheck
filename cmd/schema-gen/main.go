@@ -25,6 +25,10 @@ func main() {
 	}
 
 	// Generate schema for the Execution struct (top-level output)
+	// TODO: Setting DoNotReference to false would produce a more compact schema
+	// using $defs/$ref for shared types (e.g. ProbeTarget appears in both Plan.Targets
+	// and Result.Target). Evaluate whether downstream schema consumers handle $ref
+	// reliably before making that change.
 	reflector := &jsonschema.Reflector{
 		AllowAdditionalProperties: false,
 		DoNotReference:            true,

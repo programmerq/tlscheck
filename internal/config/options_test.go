@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -106,7 +108,7 @@ func TestParseArgsWithIPAddresses(t *testing.T) {
 	}
 }
 
-func TestParseArgsExtraHeaders(t *testing.T) {
+func TestParseArgsHeaderFlag(t *testing.T) {
 	// Not parallel because ParseArgs sets a global usage variable.
 
 	cases := []struct {
@@ -116,33 +118,46 @@ func TestParseArgsExtraHeaders(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "single header",
-			args: []string{"--proxy-server", "example.com", "--extra-headers", "Authorization: Bearer token123"},
+			name: "single -H flag",
+			args: []string{"--proxy-server", "example.com", "-H", "Authorization: Bearer token123"},
 			want: map[string]string{"Authorization": "Bearer token123"},
 		},
 		{
-			name: "multiple headers",
-			args: []string{"--proxy-server", "example.com", "--extra-headers", "Authorization: Bearer abc,X-Custom: val"},
+			name: "single --header flag",
+			args: []string{"--proxy-server", "example.com", "--header", "Authorization: Bearer token123"},
+			want: map[string]string{"Authorization": "Bearer token123"},
+		},
+		{
+			name: "multiple -H flags",
+			args: []string{
+				"--proxy-server", "example.com",
+				"-H", "Authorization: Bearer abc",
+				"-H", "X-Custom: val",
+			},
 			want: map[string]string{"Authorization": "Bearer abc", "X-Custom": "val"},
 		},
 		{
-			name: "headers with spaces around separator",
-			args: []string{"--proxy-server", "example.com", "--extra-headers", "  X-Foo : bar  "},
-			want: map[string]string{"X-Foo": "bar"},
+			name: "mixed -H and --header flags",
+			args: []string{
+				"--proxy-server", "example.com",
+				"-H", "Authorization: Bearer abc",
+				"--header", "X-Custom: val",
+			},
+			want: map[string]string{"Authorization": "Bearer abc", "X-Custom": "val"},
 		},
 		{
-			name: "no extra headers",
+			name: "no header flags",
 			args: []string{"--proxy-server", "example.com"},
 			want: nil,
 		},
 		{
-			name:    "missing colon in header",
-			args:    []string{"--proxy-server", "example.com", "--extra-headers", "Authorization"},
+			name:    "missing colon",
+			args:    []string{"--proxy-server", "example.com", "-H", "Authorization"},
 			wantErr: true,
 		},
 		{
 			name:    "empty header name",
-			args:    []string{"--proxy-server", "example.com", "--extra-headers", ": value"},
+			args:    []string{"--proxy-server", "example.com", "-H", ": value"},
 			wantErr: true,
 		},
 	}
@@ -167,49 +182,68 @@ func TestParseArgsExtraHeaders(t *testing.T) {
 	}
 }
 
-func TestParseHeaders(t *testing.T) {
+func TestParseArgsHeaderFromFile(t *testing.T) {
+	// Not parallel because ParseArgs sets a global usage variable.
+
+	dir := t.TempDir()
+	headerFile := filepath.Join(dir, "headers.txt")
+	content := "# comment line\nAuthorization: Bearer fromfile\nX-Custom: custom-value\n"
+	if err := os.WriteFile(headerFile, []byte(content), 0600); err != nil {
+		t.Fatalf("writing header file: %v", err)
+	}
+
+	args := []string{"--proxy-server", "example.com", "-H", "@" + headerFile}
+	opts, _, err := ParseArgs(args, []string{"proxy_web"})
+	if err != nil {
+		t.Fatalf("ParseArgs() error = %v", err)
+	}
+	want := map[string]string{
+		"Authorization": "Bearer fromfile",
+		"X-Custom":      "custom-value",
+	}
+	if !reflect.DeepEqual(opts.ExtraHeaders, want) {
+		t.Fatalf("ExtraHeaders = %v, want %v", opts.ExtraHeaders, want)
+	}
+}
+
+func TestHeaderFlagSet(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
 		name    string
-		input   string
+		inputs  []string
 		want    map[string]string
 		wantErr bool
 	}{
 		{
-			name:  "single header with space",
-			input: "Authorization: Bearer token",
-			want:  map[string]string{"Authorization": "Bearer token"},
+			name:   "single header",
+			inputs: []string{"Authorization: Bearer token"},
+			want:   map[string]string{"Authorization": "Bearer token"},
 		},
 		{
-			name:  "multiple headers comma separated",
-			input: "Authorization: Bearer token,X-Custom: value",
-			want:  map[string]string{"Authorization": "Bearer token", "X-Custom": "value"},
+			name:   "multiple headers via repeated Set",
+			inputs: []string{"Authorization: Bearer token", "X-Custom: value"},
+			want:   map[string]string{"Authorization": "Bearer token", "X-Custom": "value"},
 		},
 		{
-			name:  "whitespace trimmed",
-			input: "  Foo : bar  ",
-			want:  map[string]string{"Foo": "bar"},
+			name:   "whitespace trimmed",
+			inputs: []string{"  Foo : bar  "},
+			want:   map[string]string{"Foo": "bar"},
 		},
 		{
-			name:  "empty entries skipped",
-			input: "Authorization: token,,X-Custom: val,",
-			want:  map[string]string{"Authorization": "token", "X-Custom": "val"},
+			name:   "later set overrides earlier for same key",
+			inputs: []string{"X-Foo: first", "X-Foo: second"},
+			want:   map[string]string{"X-Foo": "second"},
 		},
 		{
 			name:    "missing colon",
-			input:   "Authorization",
+			inputs:  []string{"Authorization"},
 			wantErr: true,
 		},
 		{
 			name:    "empty header name",
-			input:   ": value",
+			inputs:  []string{": value"},
 			wantErr: true,
-		},
-		{
-			name:  "empty input returns nil",
-			input: "",
-			want:  nil,
 		},
 	}
 
@@ -217,18 +251,25 @@ func TestParseHeaders(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := parseHeaders(tc.input)
+			var h headerFlag
+			var lastErr error
+			for _, input := range tc.inputs {
+				if err := h.Set(input); err != nil {
+					lastErr = err
+					break
+				}
+			}
 			if tc.wantErr {
-				if err == nil {
-					t.Fatalf("expected error but got nil")
+				if lastErr == nil {
+					t.Fatal("expected error but got nil")
 				}
 				return
 			}
-			if err != nil {
-				t.Fatalf("parseHeaders() error = %v", err)
+			if lastErr != nil {
+				t.Fatalf("unexpected error: %v", lastErr)
 			}
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Fatalf("parseHeaders(%q) = %v, want %v", tc.input, got, tc.want)
+			if !reflect.DeepEqual(h.headers, tc.want) {
+				t.Fatalf("headers = %v, want %v", h.headers, tc.want)
 			}
 		})
 	}

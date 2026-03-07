@@ -83,7 +83,7 @@ func ResolveRuntime(ctx context.Context, opts Options) (Options, error) {
 		}
 
 		// Load extra headers from ~/.tsh/config.yaml and apply headers that
-		// match the target proxy address.  Headers supplied via --extra-headers
+		// match the target proxy address.  Headers supplied via -H/--header
 		// take precedence over those loaded from the config file.
 		tshCfg, cfgErr := discovery.LoadTSHConfig(home)
 		if cfgErr != nil {
