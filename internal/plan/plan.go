@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
+	"sort"
 	"strings"
 	"time"
 
@@ -23,23 +24,24 @@ type Plan struct {
 
 // ProbeTarget represents a specific (port, SNI, ALPN) combination to execute.
 type ProbeTarget struct {
-	ServiceKey        string           `json:"service_key" jsonschema:"description=Identifier for the Teleport service being probed (e.g. proxy_web, proxy_ssh, kubernetes)"`
-	DisplayName       string           `json:"display_name" jsonschema:"description=Human-readable name for the service being probed"`
-	Address           string           `json:"address" jsonschema:"description=DNS name or IP address to connect to"`
-	DNSResolvedIPs    []string         `json:"dns_resolved_ips,omitempty" jsonschema:"description=IP addresses resolved from DNS for this target (in order returned by resolver)"`
-	OverrideIPs       []string         `json:"override_ips,omitempty" jsonschema:"description=User-specified IP addresses to use instead of DNS resolution"`
-	Port              int              `json:"port" jsonschema:"description=TCP port number to connect to"`
-	PrimarySNI        string           `json:"primary_sni" jsonschema:"description=Server Name Indication (SNI) value to use in the TLS handshake"`
-	AdditionalSNIs    []string         `json:"additional_snis,omitempty" jsonschema:"description=Alternative SNI values to try if primary fails"`
-	ALPNs             []string         `json:"alpns" jsonschema:"description=Application-Layer Protocol Negotiation (ALPN) protocols to request (e.g. h2, http/1.1, teleport-proxy-ssh)"`
-	UpgradeSequence   []UpgradeAttempt `json:"upgrade_sequence" jsonschema:"description=HTTP upgrade header sequence to use for this target"`
-	Trust             TrustStrategy    `json:"trust" jsonschema:"description=Certificate trust strategy: system (OS cert store) or host_ca (Teleport host CA bundle)"`
-	InformationalOnly bool             `json:"informational_only,omitempty" jsonschema:"description=When true, failures for this target are informational and not critical (used when TLS routing is disabled)"`
-	Repeat            int              `json:"repeat" jsonschema:"description=Number of times to probe this target"`
-	Notes             []string         `json:"notes,omitempty" jsonschema:"description=Human-readable notes about this probe target's purpose or expected behavior"`
-	UseClientCert     *bool            `json:"use_client_cert,omitempty" jsonschema:"description=Whether to use client certificate for mutual TLS authentication"`
-	UseProxy          bool             `json:"use_proxy,omitempty" jsonschema:"description=Whether to use HTTP/HTTPS proxy for this connection"`
-	ProxyURL          string           `json:"proxy_url,omitempty" jsonschema:"description=Proxy URL to use if use_proxy is true"`
+	ServiceKey        string            `json:"service_key" jsonschema:"description=Identifier for the Teleport service being probed (e.g. proxy_web, proxy_ssh, kubernetes)"`
+	DisplayName       string            `json:"display_name" jsonschema:"description=Human-readable name for the service being probed"`
+	Address           string            `json:"address" jsonschema:"description=DNS name or IP address to connect to"`
+	DNSResolvedIPs    []string          `json:"dns_resolved_ips,omitempty" jsonschema:"description=IP addresses resolved from DNS for this target (in order returned by resolver)"`
+	OverrideIPs       []string          `json:"override_ips,omitempty" jsonschema:"description=User-specified IP addresses to use instead of DNS resolution"`
+	Port              int               `json:"port" jsonschema:"description=TCP port number to connect to"`
+	PrimarySNI        string            `json:"primary_sni" jsonschema:"description=Server Name Indication (SNI) value to use in the TLS handshake"`
+	AdditionalSNIs    []string          `json:"additional_snis,omitempty" jsonschema:"description=Alternative SNI values to try if primary fails"`
+	ALPNs             []string          `json:"alpns" jsonschema:"description=Application-Layer Protocol Negotiation (ALPN) protocols to request (e.g. h2, http/1.1, teleport-proxy-ssh)"`
+	UpgradeSequence   []UpgradeAttempt  `json:"upgrade_sequence" jsonschema:"description=HTTP upgrade header sequence to use for this target"`
+	Trust             TrustStrategy     `json:"trust" jsonschema:"description=Certificate trust strategy: system (OS cert store) or host_ca (Teleport host CA bundle)"`
+	InformationalOnly bool              `json:"informational_only,omitempty" jsonschema:"description=When true, failures for this target are informational and not critical (used when TLS routing is disabled)"`
+	Repeat            int               `json:"repeat" jsonschema:"description=Number of times to probe this target"`
+	Notes             []string          `json:"notes,omitempty" jsonschema:"description=Human-readable notes about this probe target's purpose or expected behavior"`
+	UseClientCert     *bool             `json:"use_client_cert,omitempty" jsonschema:"description=Whether to use client certificate for mutual TLS authentication"`
+	UseProxy          bool              `json:"use_proxy,omitempty" jsonschema:"description=Whether to use HTTP/HTTPS proxy for this connection"`
+	ProxyURL          string            `json:"proxy_url,omitempty" jsonschema:"description=Proxy URL to use if use_proxy is true"`
+	ExtraHeaders      map[string]string `json:"extra_headers,omitempty" jsonschema:"description=Extra HTTP headers to include when connecting to this target (e.g. Authorization for auth-gated proxies)"`
 }
 
 // TrustStrategy describes which certificate authorities should be trusted for a probe target.
@@ -130,6 +132,27 @@ func Build(opts config.Options) (Plan, error) {
 			withoutProxy.UseProxy = false
 			withoutProxy.Notes = append(cloneSlice(withoutProxy.Notes), "Direct connection (bypassing proxy)")
 			plan.Targets = append(plan.Targets, withoutProxy)
+		}
+	}
+
+	// If extra headers are configured, duplicate all targets to test both with and without headers.
+	if len(opts.ExtraHeaders) > 0 {
+		headerNames := joinMapKeys(opts.ExtraHeaders)
+		log.Printf("extra headers configured (%s) - duplicating targets for with and without headers", headerNames)
+		originalTargets := plan.Targets
+		plan.Targets = make([]ProbeTarget, 0, len(originalTargets)*2)
+
+		for _, target := range originalTargets {
+			// First, add the target without extra headers (baseline)
+			withoutHeaders := deepCopyProbeTarget(target)
+			withoutHeaders.Notes = append(withoutHeaders.Notes, "Without extra headers")
+			plan.Targets = append(plan.Targets, withoutHeaders)
+
+			// Then, add the target with extra headers
+			withHeaders := deepCopyProbeTarget(target)
+			withHeaders.ExtraHeaders = cloneMap(opts.ExtraHeaders)
+			withHeaders.Notes = append(withHeaders.Notes, "With extra headers: "+headerNames)
+			plan.Targets = append(plan.Targets, withHeaders)
 		}
 	}
 
@@ -254,6 +277,17 @@ func cloneUpgrades(input []UpgradeAttempt) []UpgradeAttempt {
 	return out
 }
 
+func cloneMap(input map[string]string) map[string]string {
+	if len(input) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(input))
+	for k, v := range input {
+		out[k] = v
+	}
+	return out
+}
+
 // deepCopyProbeTarget creates a deep copy of a ProbeTarget, cloning all slice fields.
 func deepCopyProbeTarget(src ProbeTarget) ProbeTarget {
 	dst := src
@@ -263,6 +297,7 @@ func deepCopyProbeTarget(src ProbeTarget) ProbeTarget {
 	dst.ALPNs = cloneSlice(src.ALPNs)
 	dst.UpgradeSequence = cloneUpgrades(src.UpgradeSequence)
 	dst.Notes = cloneSlice(src.Notes)
+	dst.ExtraHeaders = cloneMap(src.ExtraHeaders)
 	return dst
 }
 
@@ -616,4 +651,14 @@ func resolveDNSForTarget(target *ProbeTarget) {
 	}
 	target.DNSResolvedIPs = dnsIPs
 	log.Printf("resolved %s to %d IP(s): %v", target.Address, len(dnsIPs), dnsIPs)
+}
+
+// joinMapKeys returns a sorted, comma-separated list of the map's keys.
+func joinMapKeys(m map[string]string) string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ", ")
 }

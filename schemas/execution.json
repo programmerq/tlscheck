@@ -42,6 +42,13 @@
           "type": "array",
           "description": "Optional list of specific IP addresses to probe instead of DNS resolution"
         },
+        "extra_headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object",
+          "description": "Extra HTTP headers to inject when connecting (e.g. Authorization). Each test runs both with and without these headers. Loaded from ~/.tsh/config.yaml add_headers or -H/--header flag"
+        },
         "output_format": {
           "type": "string",
           "description": "Output format: json (default) or html"
@@ -592,6 +599,13 @@
               "type": "array",
               "description": "Optional list of specific IP addresses to probe instead of DNS resolution"
             },
+            "extra_headers": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object",
+              "description": "Extra HTTP headers to inject when connecting (e.g. Authorization). Each test runs both with and without these headers. Loaded from ~/.tsh/config.yaml add_headers or -H/--header flag"
+            },
             "output_format": {
               "type": "string",
               "description": "Output format: json (default) or html"
@@ -801,6 +815,13 @@
               "proxy_url": {
                 "type": "string",
                 "description": "Proxy URL to use if use_proxy is true"
+              },
+              "extra_headers": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object",
+                "description": "Extra HTTP headers to include when connecting to this target (e.g. Authorization for auth-gated proxies)"
               }
             },
             "additionalProperties": false,
@@ -938,6 +959,13 @@
               "proxy_url": {
                 "type": "string",
                 "description": "Proxy URL to use if use_proxy is true"
+              },
+              "extra_headers": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object",
+                "description": "Extra HTTP headers to include when connecting to this target (e.g. Authorization for auth-gated proxies)"
               }
             },
             "additionalProperties": false,

@@ -316,3 +316,139 @@ func TestResolveRuntimeFailsWhenHostCAUnavailable(t *testing.T) {
 		t.Fatal("expected error when host CA fetch fails")
 	}
 }
+
+// newPingServer returns a test HTTP server that responds to /webapi/ping and
+// /webapi/auth/export with canned responses.  publicAddr is included in the
+// ping response as proxy.ssh.public_addr.
+func newPingServer(t *testing.T, publicAddr string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/webapi/ping":
+			payload := map[string]any{
+				"cluster_name":   "root.example.com",
+				"server_version": "v17.9.1",
+				"proxy": map[string]any{
+					"tls_routing_enabled": false,
+					"ssh": map[string]any{
+						"public_addr": publicAddr,
+					},
+				},
+			}
+			if err := json.NewEncoder(w).Encode(payload); err != nil {
+				t.Fatalf("encode ping payload: %v", err)
+			}
+		case "/webapi/auth/export":
+			if _, err := w.Write([]byte(runtimeHostCAPEM)); err != nil {
+				t.Fatalf("write host CA: %v", err)
+			}
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+}
+
+func TestResolveRuntimeTSHConfigHeadersWithProfile(t *testing.T) {
+	srv := newPingServer(t, "cluster.example.com:443")
+	t.Cleanup(srv.Close)
+
+	dir := t.TempDir()
+	t.Setenv("TELEPORT_HOME", dir)
+
+	if err := os.WriteFile(filepath.Join(dir, "current-profile"), []byte("example.com"), 0o600); err != nil {
+		t.Fatalf("write current-profile: %v", err)
+	}
+	profileContent := []byte(fmt.Sprintf(`public_addr: cluster.example.com
+web_proxy_addr: %s
+ssh_proxy_addr: cluster.example.com:3080
+cluster: root.example.com
+`, srv.URL))
+	if err := os.WriteFile(filepath.Join(dir, "example.com.yaml"), profileContent, 0o600); err != nil {
+		t.Fatalf("write profile yaml: %v", err)
+	}
+
+	tshConfigContent := []byte(`add_headers:
+  - proxy: "cluster.example.com"
+    headers:
+      "Authorization": "Bearer profile-token"
+`)
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), tshConfigContent, 0o600); err != nil {
+		t.Fatalf("write config.yaml: %v", err)
+	}
+
+	opts := Options{Repeat: 1}
+	resolved, err := ResolveRuntime(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("ResolveRuntime returned error: %v", err)
+	}
+
+	if resolved.ExtraHeaders["Authorization"] != "Bearer profile-token" {
+		t.Fatalf("ExtraHeaders[Authorization] = %q, want %q", resolved.ExtraHeaders["Authorization"], "Bearer profile-token")
+	}
+}
+
+func TestResolveRuntimeTSHConfigHeadersWithoutProfile(t *testing.T) {
+	srv := newPingServer(t, "127.0.0.1:443")
+	t.Cleanup(srv.Close)
+
+	dir := t.TempDir()
+	t.Setenv("TELEPORT_HOME", dir)
+
+	// No active profile — user supplies --proxy-server directly.
+	tshConfigContent := []byte(`add_headers:
+  - proxy: "127.0.0.1"
+    headers:
+      "X-Token": "from-config"
+`)
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), tshConfigContent, 0o600); err != nil {
+		t.Fatalf("write config.yaml: %v", err)
+	}
+
+	opts := Options{PublicAddr: srv.URL, Repeat: 1}
+	resolved, err := ResolveRuntime(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("ResolveRuntime returned error: %v", err)
+	}
+
+	if resolved.ExtraHeaders["X-Token"] != "from-config" {
+		t.Fatalf("ExtraHeaders[X-Token] = %q, want %q", resolved.ExtraHeaders["X-Token"], "from-config")
+	}
+}
+
+func TestResolveRuntimeTSHConfigHeadersCLIOverride(t *testing.T) {
+	srv := newPingServer(t, "127.0.0.1:443")
+	t.Cleanup(srv.Close)
+
+	dir := t.TempDir()
+	t.Setenv("TELEPORT_HOME", dir)
+
+	// config.yaml sets Authorization; CLI -H should override it.
+	tshConfigContent := []byte(`add_headers:
+  - proxy: "127.0.0.1"
+    headers:
+      "Authorization": "from-config"
+      "X-Base": "base-value"
+`)
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), tshConfigContent, 0o600); err != nil {
+		t.Fatalf("write config.yaml: %v", err)
+	}
+
+	opts := Options{
+		PublicAddr:   srv.URL,
+		Repeat:       1,
+		ExtraHeaders: map[string]string{"Authorization": "from-cli"},
+	}
+	resolved, err := ResolveRuntime(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("ResolveRuntime returned error: %v", err)
+	}
+
+	// CLI value must win.
+	if resolved.ExtraHeaders["Authorization"] != "from-cli" {
+		t.Fatalf("ExtraHeaders[Authorization] = %q, want %q (CLI should override config)", resolved.ExtraHeaders["Authorization"], "from-cli")
+	}
+	// Config-only header must still be present.
+	if resolved.ExtraHeaders["X-Base"] != "base-value" {
+		t.Fatalf("ExtraHeaders[X-Base] = %q, want %q", resolved.ExtraHeaders["X-Base"], "base-value")
+	}
+}

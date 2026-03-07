@@ -1,6 +1,11 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"reflect"
+	"testing"
+)
 
 func TestSplitCSV(t *testing.T) {
 	t.Parallel()
@@ -98,6 +103,173 @@ func TestParseArgsWithIPAddresses(t *testing.T) {
 				if opts.IPAddresses[i] != ip {
 					t.Fatalf("IPAddresses[%d] = %q, want %q", i, opts.IPAddresses[i], ip)
 				}
+			}
+		})
+	}
+}
+
+func TestParseArgsHeaderFlag(t *testing.T) {
+	// Not parallel because ParseArgs sets a global usage variable.
+
+	cases := []struct {
+		name    string
+		args    []string
+		want    map[string]string
+		wantErr bool
+	}{
+		{
+			name: "single -H flag",
+			args: []string{"--proxy-server", "example.com", "-H", "Authorization: Bearer token123"},
+			want: map[string]string{"Authorization": "Bearer token123"},
+		},
+		{
+			name: "single --header flag",
+			args: []string{"--proxy-server", "example.com", "--header", "Authorization: Bearer token123"},
+			want: map[string]string{"Authorization": "Bearer token123"},
+		},
+		{
+			name: "multiple -H flags",
+			args: []string{
+				"--proxy-server", "example.com",
+				"-H", "Authorization: Bearer abc",
+				"-H", "X-Custom: val",
+			},
+			want: map[string]string{"Authorization": "Bearer abc", "X-Custom": "val"},
+		},
+		{
+			name: "mixed -H and --header flags",
+			args: []string{
+				"--proxy-server", "example.com",
+				"-H", "Authorization: Bearer abc",
+				"--header", "X-Custom: val",
+			},
+			want: map[string]string{"Authorization": "Bearer abc", "X-Custom": "val"},
+		},
+		{
+			name: "no header flags",
+			args: []string{"--proxy-server", "example.com"},
+			want: nil,
+		},
+		{
+			name:    "missing colon",
+			args:    []string{"--proxy-server", "example.com", "-H", "Authorization"},
+			wantErr: true,
+		},
+		{
+			name:    "empty header name",
+			args:    []string{"--proxy-server", "example.com", "-H", ": value"},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			opts, _, err := ParseArgs(tc.args, []string{"proxy_web"})
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error but got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ParseArgs() error = %v", err)
+			}
+			if !reflect.DeepEqual(opts.ExtraHeaders, tc.want) {
+				t.Fatalf("ExtraHeaders = %v, want %v", opts.ExtraHeaders, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseArgsHeaderFromFile(t *testing.T) {
+	// Not parallel because ParseArgs sets a global usage variable.
+
+	dir := t.TempDir()
+	headerFile := filepath.Join(dir, "headers.txt")
+	content := "# comment line\nAuthorization: Bearer fromfile\nX-Custom: custom-value\n"
+	if err := os.WriteFile(headerFile, []byte(content), 0600); err != nil {
+		t.Fatalf("writing header file: %v", err)
+	}
+
+	args := []string{"--proxy-server", "example.com", "-H", "@" + headerFile}
+	opts, _, err := ParseArgs(args, []string{"proxy_web"})
+	if err != nil {
+		t.Fatalf("ParseArgs() error = %v", err)
+	}
+	want := map[string]string{
+		"Authorization": "Bearer fromfile",
+		"X-Custom":      "custom-value",
+	}
+	if !reflect.DeepEqual(opts.ExtraHeaders, want) {
+		t.Fatalf("ExtraHeaders = %v, want %v", opts.ExtraHeaders, want)
+	}
+}
+
+func TestHeaderFlagSet(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		inputs  []string
+		want    map[string]string
+		wantErr bool
+	}{
+		{
+			name:   "single header",
+			inputs: []string{"Authorization: Bearer token"},
+			want:   map[string]string{"Authorization": "Bearer token"},
+		},
+		{
+			name:   "multiple headers via repeated Set",
+			inputs: []string{"Authorization: Bearer token", "X-Custom: value"},
+			want:   map[string]string{"Authorization": "Bearer token", "X-Custom": "value"},
+		},
+		{
+			name:   "whitespace trimmed",
+			inputs: []string{"  Foo : bar  "},
+			want:   map[string]string{"Foo": "bar"},
+		},
+		{
+			name:   "later set overrides earlier for same key",
+			inputs: []string{"X-Foo: first", "X-Foo: second"},
+			want:   map[string]string{"X-Foo": "second"},
+		},
+		{
+			name:    "missing colon",
+			inputs:  []string{"Authorization"},
+			wantErr: true,
+		},
+		{
+			name:    "empty header name",
+			inputs:  []string{": value"},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var h headerFlag
+			var lastErr error
+			for _, input := range tc.inputs {
+				if err := h.Set(input); err != nil {
+					lastErr = err
+					break
+				}
+			}
+			if tc.wantErr {
+				if lastErr == nil {
+					t.Fatal("expected error but got nil")
+				}
+				return
+			}
+			if lastErr != nil {
+				t.Fatalf("unexpected error: %v", lastErr)
+			}
+			if !reflect.DeepEqual(h.headers, tc.want) {
+				t.Fatalf("headers = %v, want %v", h.headers, tc.want)
 			}
 		})
 	}
