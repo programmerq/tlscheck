@@ -52,9 +52,9 @@ func LoadTSHConfig(home string) (TSHConfig, error) {
 // matches proxyAddr.  When multiple patterns match, later entries in
 // add_headers override earlier ones for the same header name.
 //
-// proxyAddr should be a bare hostname or hostname:port; any scheme prefix is
-// stripped before matching so that the patterns in config.yaml work against the
-// same address format tsh uses.
+// proxyAddr may be a URL, hostname, or hostname:port. Any scheme prefix and
+// any :port suffix are stripped before matching so that patterns in config.yaml
+// are matched against the bare hostname, consistent with the address format tsh uses.
 func (c TSHConfig) MatchingHeaders(proxyAddr string) map[string]string {
 	proxyAddr = normalizeHost(proxyAddr)
 
