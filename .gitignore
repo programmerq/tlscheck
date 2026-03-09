@@ -9,3 +9,5 @@ coverage.txt
 # Build artifacts
 dist/
 bin/
+.idea
+.vscode
