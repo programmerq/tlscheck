@@ -61,7 +61,7 @@ func TestRunExecutesPlanAndEmitsResults(t *testing.T) {
 
 	deps := dependencies{
 		parseArgs: func(args []string, keys []string) (config.Options, bool, error) {
-			return config.Options{PublicAddr: "teleport.example.com"}, false, nil
+			return config.Options{PublicAddr: "teleport.example.com", OutputFormat: config.OutputFormatJSON}, false, nil
 		},
 		resolveRuntime: func(ctx context.Context, opts config.Options) (config.Options, error) {
 			opts.ClusterName = "example"

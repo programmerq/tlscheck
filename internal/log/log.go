@@ -60,6 +60,16 @@ func Println(args ...interface{}) {
 	}
 }
 
+// Warnf writes a warning message to stderr unconditionally, regardless of
+// whether verbose logging is enabled. Use this for important notices that
+// users should always see.
+func Warnf(format string, args ...interface{}) {
+	globalLogger.mu.Lock()
+	defer globalLogger.mu.Unlock()
+	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
+	fmt.Fprintf(globalLogger.output, "[WARNING %s] %s\n", timestamp, fmt.Sprintf(format, args...))
+}
+
 // SanitizeURL removes credentials from a URL string for safe logging.
 // If the URL cannot be parsed, it returns "[invalid URL]".
 func SanitizeURL(rawURL string) string {

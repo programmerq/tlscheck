@@ -24,9 +24,12 @@ type Options struct {
 	Repeat            int               `json:"repeat" jsonschema:"description=Number of probe attempts to execute per target combination"`
 	ServiceFilter     []string          `json:"service_filter,omitempty" jsonschema:"description=Optional list of service keys to probe (e.g. proxy_web, proxy_ssh). When empty, all services are probed"`
 	IPAddresses       []string          `json:"ip_addresses,omitempty" jsonschema:"description=Optional list of specific IP addresses to probe instead of DNS resolution"`
-	ExtraHeaders      map[string]string `json:"extra_headers,omitempty" jsonschema:"description=Extra HTTP headers to inject when connecting (e.g. Authorization). Each test runs both with and without these headers. Loaded from ~/.tsh/config.yaml add_headers or -H/--header flag"`
-	OutputFormat      string            `json:"output_format,omitempty" jsonschema:"description=Output format: json (default) or html"`
-	Verbose           bool              `json:"verbose,omitempty" jsonschema:"description=Enable verbose logging to stderr for debugging"`
+	UseProfileCredentials bool              `json:"use_profile_credentials" jsonschema:"description=Whether to load and use client certificates from the tsh profile for mutual TLS probes"`
+	ExtraHeaders          map[string]string `json:"extra_headers,omitempty" jsonschema:"description=Extra HTTP headers to inject when connecting (e.g. Authorization). Each test runs both with and without these headers. Loaded from ~/.tsh/config.yaml add_headers or -H/--header flag"`
+	OutputFormat         string            `json:"output_format,omitempty" jsonschema:"description=Output format: html (default) or json"`
+	OutputFile           string            `json:"-"`
+	OutputFormatExplicit bool              `json:"-"`
+	Verbose              bool              `json:"verbose,omitempty" jsonschema:"description=Enable verbose logging to stderr for debugging"`
 	Proxy             ProxySettings     `json:"proxy" jsonschema:"description=HTTP/HTTPS proxy configuration detected from environment variables"`
 	ProfileSource     *ProfileInfo      `json:"profile_source,omitempty" jsonschema:"description=Information about the tsh profile used to populate default values"`
 	ClientCert        *ClientCertInfo   `json:"-"` // Client cert info moved to top-level client_certs
@@ -184,7 +187,10 @@ func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 	const headerUsage = `Add an extra HTTP header (format: "Name: Value"). May be repeated. Use @filename to load headers from a file. Each probe runs both with and without these headers.`
 	fs.Var(&headerFlagVal, "H", headerUsage)
 	fs.Var(&headerFlagVal, "header", headerUsage)
-	fs.StringVar(&opts.OutputFormat, "output-format", OutputFormatJSON, fmt.Sprintf("Output format: %s or %s", OutputFormatJSON, OutputFormatHTML))
+	fs.BoolVar(&opts.UseProfileCredentials, "use-profile-credentials", false, "Load and use client certificates from tsh profile for mutual TLS probes")
+	fs.StringVar(&opts.OutputFormat, "output-format", OutputFormatHTML, fmt.Sprintf("Output format: %s (default) or %s", OutputFormatHTML, OutputFormatJSON))
+	fs.StringVar(&opts.OutputFile, "output", "", "Write output to file instead of stdout")
+	fs.StringVar(&opts.OutputFile, "o", "", "Write output to file instead of stdout")
 	fs.BoolVar(&opts.Verbose, "verbose", false, "Enable verbose logging to stderr for debugging")
 	fs.BoolVar(&showVersion, "version", false, "Print tlscheck version and exit")
 	fs.BoolVar(&showVersion, "v", false, "Print tlscheck version and exit")
@@ -197,7 +203,9 @@ func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 		fmt.Fprintf(fs.Output(), "  --services string\n\t%s\n", servicesHelp)
 		fmt.Fprintf(fs.Output(), "  --ip-addresses string\n\tComma-separated list of IP addresses to use instead of DNS resolution\n")
 		fmt.Fprintf(fs.Output(), "  -H / --header \"Name: Value\"\n\tAdd an extra HTTP header. May be repeated. Use @filename to load from file.\n\tEach probe runs both with and without these headers.\n")
-		fmt.Fprintf(fs.Output(), "  --output-format string\n\tOutput format: json (default) or html\n")
+		fmt.Fprintf(fs.Output(), "  --use-profile-credentials\n\tLoad and use client certificates from tsh profile for mutual TLS probes (default: false)\n")
+		fmt.Fprintf(fs.Output(), "  --output-format string\n\tOutput format: html (default) or json\n")
+		fmt.Fprintf(fs.Output(), "  -o, --output string\n\tWrite output to file instead of stdout (format auto-detected from extension)\n")
 		fmt.Fprintf(fs.Output(), "  --verbose\n\tEnable verbose logging to stderr for debugging\n")
 		fmt.Fprintf(fs.Output(), "  -v, --version\n\tPrint tlscheck version and exit\n")
 	}
@@ -206,6 +214,13 @@ func ParseArgs(args []string, serviceKeys []string) (Options, bool, error) {
 	if err := fs.Parse(args); err != nil {
 		return Options{}, false, err
 	}
+
+	// Track whether --output-format was explicitly set (for extension-based auto-detection)
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "output-format" {
+			opts.OutputFormatExplicit = true
+		}
+	})
 
 	if opts.Repeat <= 0 {
 		return Options{}, false, fmt.Errorf("repeat must be positive (got %d)", opts.Repeat)
@@ -271,6 +286,27 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// RedactHeaders returns a copy of the header map with sensitive values replaced
+// by "[REDACTED]". Headers considered sensitive: Authorization, Proxy-Authorization,
+// Cookie, Set-Cookie, and any key containing "token" or "secret" (case-insensitive).
+func RedactHeaders(headers map[string]string) map[string]string {
+	if len(headers) == 0 {
+		return headers
+	}
+	redacted := make(map[string]string, len(headers))
+	for k, v := range headers {
+		lower := strings.ToLower(k)
+		if lower == "authorization" || lower == "proxy-authorization" ||
+			lower == "cookie" || lower == "set-cookie" ||
+			strings.Contains(lower, "token") || strings.Contains(lower, "secret") {
+			redacted[k] = "[REDACTED]"
+		} else {
+			redacted[k] = v
+		}
+	}
+	return redacted
 }
 
 // WantsService reports whether the options request a specific service key.

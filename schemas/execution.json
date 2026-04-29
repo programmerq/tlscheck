@@ -42,6 +42,10 @@
           "type": "array",
           "description": "Optional list of specific IP addresses to probe instead of DNS resolution"
         },
+        "use_profile_credentials": {
+          "type": "boolean",
+          "description": "Whether to load and use client certificates from the tsh profile for mutual TLS probes"
+        },
         "extra_headers": {
           "additionalProperties": {
             "type": "string"
@@ -51,7 +55,7 @@
         },
         "output_format": {
           "type": "string",
-          "description": "Output format: json (default) or html"
+          "description": "Output format: html (default) or json"
         },
         "verbose": {
           "type": "boolean",
@@ -121,6 +125,7 @@
         "teleport_version",
         "tls_routing_enabled",
         "repeat",
+        "use_profile_credentials",
         "proxy"
       ],
       "description": "Parsed command-line arguments and runtime configuration used for this execution"
@@ -599,6 +604,10 @@
               "type": "array",
               "description": "Optional list of specific IP addresses to probe instead of DNS resolution"
             },
+            "use_profile_credentials": {
+              "type": "boolean",
+              "description": "Whether to load and use client certificates from the tsh profile for mutual TLS probes"
+            },
             "extra_headers": {
               "additionalProperties": {
                 "type": "string"
@@ -608,7 +617,7 @@
             },
             "output_format": {
               "type": "string",
-              "description": "Output format: json (default) or html"
+              "description": "Output format: html (default) or json"
             },
             "verbose": {
               "type": "boolean",
@@ -678,6 +687,7 @@
             "teleport_version",
             "tls_routing_enabled",
             "repeat",
+            "use_profile_credentials",
             "proxy"
           ],
           "description": "Configuration options that were used to generate this plan"

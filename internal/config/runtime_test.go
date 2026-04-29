@@ -228,7 +228,7 @@ cluster: root.example.com
 		t.Fatalf("write key: %v", err)
 	}
 
-	opts := Options{Repeat: 1}
+	opts := Options{Repeat: 1, UseProfileCredentials: true}
 
 	resolved, err := ResolveRuntime(context.Background(), opts)
 	if err != nil {
@@ -284,6 +284,101 @@ cluster: root.example.com
 	t.Logf("  KeyUsage: %v", resolved.ClientCert.KeyUsage)
 	t.Logf("  ExtKeyUsage: %v", resolved.ClientCert.ExtKeyUsage)
 	t.Logf("  Extensions count: %d", len(resolved.ClientCert.Extensions))
+}
+
+func TestResolveRuntimeSkipsClientCertWhenFlagFalse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/webapi/ping":
+			payload := map[string]any{
+				"cluster_name":   "root.example.com",
+				"server_version": "v17.9.1",
+				"proxy": map[string]any{
+					"tls_routing_enabled": false,
+					"ssh": map[string]any{
+						"public_addr": "cluster.example.com:443",
+					},
+				},
+			}
+			if err := json.NewEncoder(w).Encode(payload); err != nil {
+				t.Fatalf("encode ping payload: %v", err)
+			}
+		case "/webapi/auth/export":
+			if _, err := w.Write([]byte(runtimeHostCAPEM)); err != nil {
+				t.Fatalf("write host CA: %v", err)
+			}
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	dir := t.TempDir()
+	t.Setenv("TELEPORT_HOME", dir)
+
+	profileName := "example.com"
+	if err := os.WriteFile(filepath.Join(dir, "current-profile"), []byte(profileName), 0o600); err != nil {
+		t.Fatalf("write current-profile: %v", err)
+	}
+
+	profileContent := []byte(fmt.Sprintf(`public_addr: cluster.example.com
+web_proxy_addr: %s
+ssh_proxy_addr: cluster.example.com:3080
+cluster: root.example.com
+`, srv.URL))
+	if err := os.WriteFile(filepath.Join(dir, profileName+".yaml"), profileContent, 0o600); err != nil {
+		t.Fatalf("write profile yaml: %v", err)
+	}
+
+	// Create keys directory and add a test client certificate
+	keysDir := filepath.Join(dir, "keys", profileName)
+	if err := os.MkdirAll(keysDir, 0o700); err != nil {
+		t.Fatalf("create keys directory: %v", err)
+	}
+
+	testCertPEM, testKeyPEM, err := discovery.GenerateTestCertificate()
+	if err != nil {
+		t.Fatalf("generate test certificate: %v", err)
+	}
+
+	certPath := filepath.Join(keysDir, profileName+".crt")
+	keyPath := filepath.Join(keysDir, profileName+".key")
+	if err := os.WriteFile(certPath, testCertPEM, 0o600); err != nil {
+		t.Fatalf("write cert: %v", err)
+	}
+	if err := os.WriteFile(keyPath, testKeyPEM, 0o600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+
+	// UseProfileCredentials defaults to false
+	opts := Options{Repeat: 1, UseProfileCredentials: false}
+
+	resolved, err := ResolveRuntime(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("ResolveRuntime returned error: %v", err)
+	}
+
+	// Profile info should still be populated
+	if resolved.ProfileSource == nil {
+		t.Fatal("ProfileSource should not be nil")
+	}
+	if resolved.ProfileSource.Name != profileName {
+		t.Fatalf("ProfileSource.Name = %q, want %q", resolved.ProfileSource.Name, profileName)
+	}
+
+	// But client cert should NOT be loaded
+	if resolved.ClientCert != nil {
+		t.Fatal("ClientCert should be nil when UseProfileCredentials is false")
+	}
+	if resolved.ProfileSource.ClientCertFound {
+		t.Fatal("ClientCertFound should be false when UseProfileCredentials is false")
+	}
+	if len(resolved.ClientCertPEM) > 0 {
+		t.Fatal("ClientCertPEM should be empty when UseProfileCredentials is false")
+	}
+	if len(resolved.ClientKeyPEM) > 0 {
+		t.Fatal("ClientKeyPEM should be empty when UseProfileCredentials is false")
+	}
 }
 
 func TestResolveRuntimeFailsWhenHostCAUnavailable(t *testing.T) {

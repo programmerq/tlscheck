@@ -206,6 +206,129 @@ func TestParseArgsHeaderFromFile(t *testing.T) {
 	}
 }
 
+func TestParseArgsDefaultsToHTML(t *testing.T) {
+	opts, _, err := ParseArgs([]string{"--proxy-server", "example.com"}, []string{"proxy_web"})
+	if err != nil {
+		t.Fatalf("ParseArgs() error = %v", err)
+	}
+	if opts.OutputFormat != OutputFormatHTML {
+		t.Fatalf("OutputFormat = %q, want %q", opts.OutputFormat, OutputFormatHTML)
+	}
+}
+
+func TestParseArgsUseProfileCredentialsDefault(t *testing.T) {
+	opts, _, err := ParseArgs([]string{"--proxy-server", "example.com"}, []string{"proxy_web"})
+	if err != nil {
+		t.Fatalf("ParseArgs() error = %v", err)
+	}
+	if opts.UseProfileCredentials {
+		t.Fatal("UseProfileCredentials should default to false")
+	}
+}
+
+func TestParseArgsUseProfileCredentialsTrue(t *testing.T) {
+	opts, _, err := ParseArgs([]string{"--proxy-server", "example.com", "--use-profile-credentials"}, []string{"proxy_web"})
+	if err != nil {
+		t.Fatalf("ParseArgs() error = %v", err)
+	}
+	if !opts.UseProfileCredentials {
+		t.Fatal("UseProfileCredentials should be true when flag is set")
+	}
+}
+
+func TestParseArgsOutputFile(t *testing.T) {
+	opts, _, err := ParseArgs([]string{"--proxy-server", "example.com", "-o", "results.html"}, []string{"proxy_web"})
+	if err != nil {
+		t.Fatalf("ParseArgs() error = %v", err)
+	}
+	if opts.OutputFile != "results.html" {
+		t.Fatalf("OutputFile = %q, want %q", opts.OutputFile, "results.html")
+	}
+}
+
+func TestParseArgsOutputFormatExplicit(t *testing.T) {
+	opts, _, err := ParseArgs([]string{"--proxy-server", "example.com", "--output-format", "json"}, []string{"proxy_web"})
+	if err != nil {
+		t.Fatalf("ParseArgs() error = %v", err)
+	}
+	if !opts.OutputFormatExplicit {
+		t.Fatal("OutputFormatExplicit should be true when --output-format is set")
+	}
+}
+
+func TestRedactHeaders(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		input map[string]string
+		want  map[string]string
+	}{
+		{
+			name:  "nil map",
+			input: nil,
+			want:  nil,
+		},
+		{
+			name:  "empty map",
+			input: map[string]string{},
+			want:  map[string]string{},
+		},
+		{
+			name:  "authorization redacted",
+			input: map[string]string{"Authorization": "Bearer secret123"},
+			want:  map[string]string{"Authorization": "[REDACTED]"},
+		},
+		{
+			name:  "proxy-authorization redacted",
+			input: map[string]string{"Proxy-Authorization": "Basic abc123"},
+			want:  map[string]string{"Proxy-Authorization": "[REDACTED]"},
+		},
+		{
+			name:  "cookie redacted",
+			input: map[string]string{"Cookie": "session=abc"},
+			want:  map[string]string{"Cookie": "[REDACTED]"},
+		},
+		{
+			name:  "token in name redacted",
+			input: map[string]string{"X-Auth-Token": "secret"},
+			want:  map[string]string{"X-Auth-Token": "[REDACTED]"},
+		},
+		{
+			name:  "secret in name redacted",
+			input: map[string]string{"X-Client-Secret": "secret"},
+			want:  map[string]string{"X-Client-Secret": "[REDACTED]"},
+		},
+		{
+			name:  "benign header preserved",
+			input: map[string]string{"X-Custom": "value", "Content-Type": "application/json"},
+			want:  map[string]string{"X-Custom": "value", "Content-Type": "application/json"},
+		},
+		{
+			name: "mixed sensitive and benign",
+			input: map[string]string{
+				"Authorization": "Bearer secret",
+				"X-Request-Id":  "abc123",
+			},
+			want: map[string]string{
+				"Authorization": "[REDACTED]",
+				"X-Request-Id":  "abc123",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := RedactHeaders(tc.input)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("RedactHeaders(%v) = %v, want %v", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestHeaderFlagSet(t *testing.T) {
 	t.Parallel()
 

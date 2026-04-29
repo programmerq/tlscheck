@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/programmerq/tlscheck/internal/config"
 	"github.com/programmerq/tlscheck/internal/htmlexport"
@@ -127,14 +129,46 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, deps depe
 		return 1
 	}
 
+	// Redact sensitive headers before rendering output
+	if exec.Arguments != nil {
+		exec.Arguments.ExtraHeaders = config.RedactHeaders(exec.Arguments.ExtraHeaders)
+	}
+	exec.Plan.Options.ExtraHeaders = config.RedactHeaders(exec.Plan.Options.ExtraHeaders)
+	for i := range exec.Plan.Targets {
+		exec.Plan.Targets[i].ExtraHeaders = config.RedactHeaders(exec.Plan.Targets[i].ExtraHeaders)
+	}
+
+	// Determine output destination
+	outputWriter := stdout
+	if resolved.OutputFile != "" {
+		f, err := os.Create(resolved.OutputFile)
+		if err != nil {
+			fmt.Fprintf(stderr, "failed to create output file: %v\n", err)
+			return 1
+		}
+		defer f.Close()
+		outputWriter = f
+		fmt.Fprintf(stderr, "Writing output to %s\n", resolved.OutputFile)
+	}
+
+	// Auto-detect format from file extension when --output-format wasn't explicitly set
+	if resolved.OutputFile != "" && !resolved.OutputFormatExplicit {
+		switch strings.ToLower(filepath.Ext(resolved.OutputFile)) {
+		case ".json":
+			resolved.OutputFormat = config.OutputFormatJSON
+		case ".html", ".htm":
+			resolved.OutputFormat = config.OutputFormatHTML
+		}
+	}
+
 	// Output based on format
 	if resolved.OutputFormat == config.OutputFormatHTML {
-		if err := renderHTML(stdout, exec); err != nil {
+		if err := renderHTML(outputWriter, exec); err != nil {
 			fmt.Fprintf(stderr, "failed to render HTML: %v\n", err)
 			return 1
 		}
 	} else {
-		encoder := json.NewEncoder(stdout)
+		encoder := json.NewEncoder(outputWriter)
 		encoder.SetIndent("", "  ")
 		if err := encoder.Encode(exec); err != nil {
 			fmt.Fprintf(stderr, "failed to render results: %v\n", err)

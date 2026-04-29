@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 
@@ -43,42 +44,50 @@ func ResolveRuntime(ctx context.Context, opts Options) (Options, error) {
 			ClientCertFound: false, // Will be set to true if cert is successfully loaded
 		}
 
-		// Try to load the client certificate for this profile
-		if clientCert := discovery.LoadClientCert(home, profile.Name, profile.Username); clientCert != nil {
-			log.Printf("loaded client certificate: %s", clientCert.Fingerprint)
-			resolved.ProfileSource.ClientCertFound = true
-			resolved.ClientCertPEM = clientCert.CertPEM
-			resolved.ClientKeyPEM = clientCert.KeyPEM
+		// Load client certificate only when explicitly requested
+		if resolved.UseProfileCredentials {
+			if clientCert := discovery.LoadClientCert(home, profile.Name, profile.Username); clientCert != nil {
+				log.Warnf("Using client certificate from tsh profile: %s (expires: %s). Use --use-profile-credentials=false to disable.", clientCert.Subject, clientCert.NotAfter)
+				resolved.ProfileSource.ClientCertFound = true
+				resolved.ClientCertPEM = clientCert.CertPEM
+				resolved.ClientKeyPEM = clientCert.KeyPEM
 
-			// Convert extensions to config package type
-			extensions := make([]CertExtension, len(clientCert.Extensions))
-			for i, ext := range clientCert.Extensions {
-				extensions[i] = CertExtension{
-					OID:      ext.OID,
-					Critical: ext.Critical,
-					Value:    ext.Value,
+				// Convert extensions to config package type
+				extensions := make([]CertExtension, len(clientCert.Extensions))
+				for i, ext := range clientCert.Extensions {
+					extensions[i] = CertExtension{
+						OID:      ext.OID,
+						Critical: ext.Critical,
+						Value:    ext.Value,
+					}
+				}
+
+				resolved.ClientCert = &ClientCertInfo{
+					CertPath:       clientCert.CertPath,
+					KeyPath:        clientCert.KeyPath,
+					Fingerprint:    clientCert.Fingerprint,
+					Subject:        clientCert.Subject,
+					Issuer:         clientCert.Issuer,
+					NotBefore:      clientCert.NotBefore,
+					NotAfter:       clientCert.NotAfter,
+					SerialNumber:   clientCert.SerialNumber,
+					SignatureAlgo:  clientCert.SignatureAlgo,
+					PublicKeyAlgo:  clientCert.PublicKeyAlgo,
+					KeyUsage:       clientCert.KeyUsage,
+					ExtKeyUsage:    clientCert.ExtKeyUsage,
+					DNSNames:       clientCert.DNSNames,
+					EmailAddresses: clientCert.EmailAddresses,
+					IPAddresses:    clientCert.IPAddresses,
+					URIs:           clientCert.URIs,
+					IsCA:           clientCert.IsCA,
+					Extensions:     extensions,
 				}
 			}
-
-			resolved.ClientCert = &ClientCertInfo{
-				CertPath:       clientCert.CertPath,
-				KeyPath:        clientCert.KeyPath,
-				Fingerprint:    clientCert.Fingerprint,
-				Subject:        clientCert.Subject,
-				Issuer:         clientCert.Issuer,
-				NotBefore:      clientCert.NotBefore,
-				NotAfter:       clientCert.NotAfter,
-				SerialNumber:   clientCert.SerialNumber,
-				SignatureAlgo:  clientCert.SignatureAlgo,
-				PublicKeyAlgo:  clientCert.PublicKeyAlgo,
-				KeyUsage:       clientCert.KeyUsage,
-				ExtKeyUsage:    clientCert.ExtKeyUsage,
-				DNSNames:       clientCert.DNSNames,
-				EmailAddresses: clientCert.EmailAddresses,
-				IPAddresses:    clientCert.IPAddresses,
-				URIs:           clientCert.URIs,
-				IsCA:           clientCert.IsCA,
-				Extensions:     extensions,
+		} else {
+			// Check if credentials exist but weren't loaded, to inform the user
+			certPath, _ := discovery.GetClientCertPaths(home, profile.Name, profile.Username)
+			if _, err := os.Stat(certPath); err == nil {
+				log.Warnf("tsh profile credentials found but not loaded. Use --use-profile-credentials to enable.")
 			}
 		}
 
