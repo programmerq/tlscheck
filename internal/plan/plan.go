@@ -388,66 +388,10 @@ var serviceTemplates = []serviceTemplate{
 		Informational: informationalWhenSeparateListeners,
 		Trust:         TrustHostCA,
 	},
-	{
-		Key:         "db_postgres",
-		DisplayName: "Database listener (Postgres)",
-		Ports:       webPortList,
-		ALPNs: func(config.Options, string) []string {
-			return nil
-		},
-		SNIs: func(opts config.Options, _ string) (string, []string) {
-			return opts.PublicAddr, nil
-		},
-		Notes: []string{
-			"ALPN negotiated by tsh db proxy; harness verifies upstream reachability",
-		},
-		Informational: informationalWhenSeparateListeners,
-	},
-	{
-		Key:         "db_mysql",
-		DisplayName: "Database listener (MySQL)",
-		Ports:       webPortList,
-		ALPNs: func(config.Options, string) []string {
-			return nil
-		},
-		SNIs: func(opts config.Options, _ string) (string, []string) {
-			return opts.PublicAddr, nil
-		},
-		Notes: []string{
-			"ALPN negotiated by tsh db proxy; harness verifies upstream reachability",
-		},
-		Informational: informationalWhenSeparateListeners,
-	},
-	{
-		Key:         "db_mongodb",
-		DisplayName: "Database listener (MongoDB)",
-		Ports:       webPortList,
-		ALPNs: func(config.Options, string) []string {
-			return nil
-		},
-		SNIs: func(opts config.Options, _ string) (string, []string) {
-			return opts.PublicAddr, nil
-		},
-		Notes: []string{
-			"ALPN negotiated by tsh db proxy; harness verifies upstream reachability",
-		},
-		Informational: informationalWhenSeparateListeners,
-	},
-	{
-		Key:         "db_redis",
-		DisplayName: "Database listener (Redis)",
-		Ports:       webPortList,
-		ALPNs: func(config.Options, string) []string {
-			return nil
-		},
-		SNIs: func(opts config.Options, _ string) (string, []string) {
-			return opts.PublicAddr, nil
-		},
-		Notes: []string{
-			"ALPN negotiated by tsh db proxy; harness verifies upstream reachability",
-		},
-		Informational: informationalWhenSeparateListeners,
-	},
+	dbTemplate("db_postgres", "Database listener (Postgres)"),
+	dbTemplate("db_mysql", "Database listener (MySQL)"),
+	dbTemplate("db_mongodb", "Database listener (MongoDB)"),
+	dbTemplate("db_redis", "Database listener (Redis)"),
 	{
 		Key:         "app_access",
 		DisplayName: "App Access",
@@ -475,6 +419,24 @@ var serviceTemplates = []serviceTemplate{
 		},
 		Informational: informationalWhenSeparateListeners,
 	},
+}
+
+func dbTemplate(key, displayName string) serviceTemplate {
+	return serviceTemplate{
+		Key:         key,
+		DisplayName: displayName,
+		Ports:       webPortList,
+		ALPNs: func(config.Options, string) []string {
+			return nil
+		},
+		SNIs: func(opts config.Options, _ string) (string, []string) {
+			return opts.PublicAddr, nil
+		},
+		Notes: []string{
+			"ALPN negotiated by tsh db proxy; harness verifies upstream reachability",
+		},
+		Informational: informationalWhenSeparateListeners,
+	}
 }
 
 func webPortList(opts config.Options) []int {
@@ -520,15 +482,7 @@ func determineUpgradeSequence(version string) []UpgradeAttempt {
 	switch {
 	case major >= 18:
 		return []UpgradeAttempt{{Token: "websocket", Path: upgradeEndpoint}}
-	case major == 17:
-		return []UpgradeAttempt{
-			{Token: "websocket", Path: upgradeEndpoint},
-			{Token: "alpn", Path: upgradeEndpoint},
-			{Token: "alpn-ping", Path: upgradeEndpoint},
-		}
-	case major == 16:
-		fallthrough
-	case major == 15 && minor >= 1:
+	case major >= 16, major == 15 && minor >= 1:
 		return []UpgradeAttempt{
 			{Token: "websocket", Path: upgradeEndpoint},
 			{Token: "alpn", Path: upgradeEndpoint},
