@@ -9,6 +9,9 @@ import (
 	"encoding/pem"
 	"strconv"
 	"strings"
+
+	"github.com/programmerq/tlscheck/internal/certutil"
+	"github.com/programmerq/tlscheck/internal/sliceutil"
 )
 
 // CertExtensionInfo represents a parsed x509 certificate extension.
@@ -189,8 +192,8 @@ func ParseCertInfo(cert *x509.Certificate, pemData string) *CertInfo {
 		SerialNumber:   cert.SerialNumber.String(),
 		SignatureAlgo:  cert.SignatureAlgorithm.String(),
 		PublicKeyAlgo:  cert.PublicKeyAlgorithm.String(),
-		KeyUsage:       parseKeyUsage(cert.KeyUsage),
-		ExtKeyUsage:    parseExtKeyUsage(cert.ExtKeyUsage),
+		KeyUsage:       certutil.ParseKeyUsage(cert.KeyUsage),
+		ExtKeyUsage:    certutil.ParseExtKeyUsage(cert.ExtKeyUsage),
 		Extensions:     parseExtensions(cert.Extensions),
 	}
 
@@ -205,11 +208,11 @@ func computeFingerprint(cert *x509.Certificate) string {
 func parseCertName(name pkix.Name) CertName {
 	return CertName{
 		CommonName:         name.CommonName,
-		Organization:       copySlice(name.Organization),
-		OrganizationalUnit: copySlice(name.OrganizationalUnit),
-		Country:            copySlice(name.Country),
-		Province:           copySlice(name.Province),
-		Locality:           copySlice(name.Locality),
+		Organization:       sliceutil.CloneStrings(name.Organization),
+		OrganizationalUnit: sliceutil.CloneStrings(name.OrganizationalUnit),
+		Country:            sliceutil.CloneStrings(name.Country),
+		Province:           sliceutil.CloneStrings(name.Province),
+		Locality:           sliceutil.CloneStrings(name.Locality),
 		SerialNumber:       name.SerialNumber,
 	}
 }
@@ -218,7 +221,7 @@ func parseSANs(cert *x509.Certificate) CertSANs {
 	sans := CertSANs{}
 
 	if len(cert.DNSNames) > 0 {
-		sans.DNS = copySlice(cert.DNSNames)
+		sans.DNS = sliceutil.CloneStrings(cert.DNSNames)
 	}
 
 	if len(cert.IPAddresses) > 0 {
@@ -238,7 +241,7 @@ func parseSANs(cert *x509.Certificate) CertSANs {
 	}
 
 	if len(cert.EmailAddresses) > 0 {
-		sans.Email = copySlice(cert.EmailAddresses)
+		sans.Email = sliceutil.CloneStrings(cert.EmailAddresses)
 	}
 
 	return sans
@@ -254,67 +257,6 @@ func formatKeyID(keyID []byte) string {
 		parts[i] = strings.ToUpper(hex.EncodeToString([]byte{b}))
 	}
 	return strings.Join(parts, ":")
-}
-
-func parseKeyUsage(usage x509.KeyUsage) []string {
-	var usages []string
-	if usage&x509.KeyUsageDigitalSignature != 0 {
-		usages = append(usages, "DigitalSignature")
-	}
-	if usage&x509.KeyUsageContentCommitment != 0 {
-		usages = append(usages, "ContentCommitment")
-	}
-	if usage&x509.KeyUsageKeyEncipherment != 0 {
-		usages = append(usages, "KeyEncipherment")
-	}
-	if usage&x509.KeyUsageDataEncipherment != 0 {
-		usages = append(usages, "DataEncipherment")
-	}
-	if usage&x509.KeyUsageKeyAgreement != 0 {
-		usages = append(usages, "KeyAgreement")
-	}
-	if usage&x509.KeyUsageCertSign != 0 {
-		usages = append(usages, "CertSign")
-	}
-	if usage&x509.KeyUsageCRLSign != 0 {
-		usages = append(usages, "CRLSign")
-	}
-	if usage&x509.KeyUsageEncipherOnly != 0 {
-		usages = append(usages, "EncipherOnly")
-	}
-	if usage&x509.KeyUsageDecipherOnly != 0 {
-		usages = append(usages, "DecipherOnly")
-	}
-	return usages
-}
-
-func parseExtKeyUsage(extUsage []x509.ExtKeyUsage) []string {
-	var usages []string
-	for _, u := range extUsage {
-		switch u {
-		case x509.ExtKeyUsageAny:
-			usages = append(usages, "Any")
-		case x509.ExtKeyUsageServerAuth:
-			usages = append(usages, "ServerAuth")
-		case x509.ExtKeyUsageClientAuth:
-			usages = append(usages, "ClientAuth")
-		case x509.ExtKeyUsageCodeSigning:
-			usages = append(usages, "CodeSigning")
-		case x509.ExtKeyUsageEmailProtection:
-			usages = append(usages, "EmailProtection")
-		case x509.ExtKeyUsageIPSECEndSystem:
-			usages = append(usages, "IPSECEndSystem")
-		case x509.ExtKeyUsageIPSECTunnel:
-			usages = append(usages, "IPSECTunnel")
-		case x509.ExtKeyUsageIPSECUser:
-			usages = append(usages, "IPSECUser")
-		case x509.ExtKeyUsageTimeStamping:
-			usages = append(usages, "TimeStamping")
-		case x509.ExtKeyUsageOCSPSigning:
-			usages = append(usages, "OCSPSigning")
-		}
-	}
-	return usages
 }
 
 // parseExtensions parses the raw x509 extensions, skipping standard extensions
@@ -350,15 +292,6 @@ func parseExtensions(exts []pkix.Extension) []CertExtensionInfo {
 		result = append(result, info)
 	}
 	return result
-}
-
-func copySlice(input []string) []string {
-	if len(input) == 0 {
-		return nil
-	}
-	out := make([]string, len(input))
-	copy(out, input)
-	return out
 }
 
 // ParseCertFromPEM parses a PEM-encoded certificate and returns CertInfo.

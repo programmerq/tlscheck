@@ -152,10 +152,7 @@ func ResolveRuntime(ctx context.Context, opts Options) (Options, error) {
 		}
 	}
 
-	info, err := discovery.FetchClusterInfo(ctx, pingAddr, discovery.ProxySettings{
-		HTTPSProxy: resolved.Proxy.HTTPSProxy,
-		HTTPProxy:  resolved.Proxy.HTTPProxy,
-	})
+	info, err := discovery.FetchClusterInfo(ctx, pingAddr, resolved.Proxy)
 	if err != nil {
 		return Options{}, fmt.Errorf("failed to fetch cluster info: %w", err)
 	}
@@ -207,10 +204,7 @@ func ResolveRuntime(ctx context.Context, opts Options) (Options, error) {
 		tried[endpoint] = struct{}{}
 
 		log.Printf("fetching host CA bundle from %s", endpoint)
-		bundle, fetchErr = discovery.FetchHostCAs(ctx, endpoint, discovery.ProxySettings{
-			HTTPSProxy: resolved.Proxy.HTTPSProxy,
-			HTTPProxy:  resolved.Proxy.HTTPProxy,
-		})
+		bundle, fetchErr = discovery.FetchHostCAs(ctx, endpoint, resolved.Proxy)
 		if fetchErr == nil {
 			log.Printf("successfully fetched host CA bundle from %s (%d bytes)", endpoint, len(bundle))
 			resolved.HostCAPEM = bundle

@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/programmerq/tlscheck/internal/sliceutil"
 )
 
 // NetworkInfo captures network configuration including proxy, routing, and VPN details.
@@ -135,11 +137,12 @@ type VPNApp struct {
 
 // DiscoverNetwork gathers comprehensive network configuration information.
 func DiscoverNetwork(ctx context.Context) NetworkInfo {
+	routes := discoverRoutes(ctx)
 	info := NetworkInfo{
 		System:      discoverSystemInfo(),
 		ProxyConfig: discoverProxyConfig(ctx),
-		Routes:      discoverRoutes(ctx),
-		VPN:         discoverVPN(ctx),
+		Routes:      routes,
+		VPN:         discoverVPN(ctx, routes),
 	}
 	return info
 }
@@ -273,11 +276,11 @@ func discoverProxyConfig(ctx context.Context) ProxyConfig {
 // detectEnvironmentProxies reads proxy settings from environment variables.
 func detectEnvironmentProxies() EnvironmentProxies {
 	proxies := EnvironmentProxies{
-		HTTPSProxy: firstNonEmpty(os.Getenv("HTTPS_PROXY"), os.Getenv("https_proxy")),
-		HTTPProxy:  firstNonEmpty(os.Getenv("HTTP_PROXY"), os.Getenv("http_proxy")),
-		NoProxy:    firstNonEmpty(os.Getenv("NO_PROXY"), os.Getenv("no_proxy")),
-		AllProxy:   firstNonEmpty(os.Getenv("ALL_PROXY"), os.Getenv("all_proxy")),
-		FTPProxy:   firstNonEmpty(os.Getenv("FTP_PROXY"), os.Getenv("ftp_proxy")),
+		HTTPSProxy: sliceutil.FirstNonEmpty(os.Getenv("HTTPS_PROXY"), os.Getenv("https_proxy")),
+		HTTPProxy:  sliceutil.FirstNonEmpty(os.Getenv("HTTP_PROXY"), os.Getenv("http_proxy")),
+		NoProxy:    sliceutil.FirstNonEmpty(os.Getenv("NO_PROXY"), os.Getenv("no_proxy")),
+		AllProxy:   sliceutil.FirstNonEmpty(os.Getenv("ALL_PROXY"), os.Getenv("all_proxy")),
+		FTPProxy:   sliceutil.FirstNonEmpty(os.Getenv("FTP_PROXY"), os.Getenv("ftp_proxy")),
 	}
 
 	// Parse proxy hosts for easier inspection
@@ -553,7 +556,7 @@ func detectWindowsProxy(ctx context.Context) *SystemProxy {
 
 // detectSOCKSProxy detects SOCKS proxy from environment variables.
 func detectSOCKSProxy() *SOCKSProxyInfo {
-	allProxy := firstNonEmpty(os.Getenv("ALL_PROXY"), os.Getenv("all_proxy"))
+	allProxy := sliceutil.FirstNonEmpty(os.Getenv("ALL_PROXY"), os.Getenv("all_proxy"))
 	if allProxy == "" {
 		return nil
 	}
@@ -1065,7 +1068,7 @@ func parseWindowsRoutes(output string) []Route {
 }
 
 // discoverVPN detects VPN connections and related information.
-func discoverVPN(ctx context.Context) VPNInfo {
+func discoverVPN(ctx context.Context, routes RouteInfo) VPNInfo {
 	info := VPNInfo{
 		DetectionTime: time.Now().UTC(),
 	}
@@ -1082,10 +1085,9 @@ func discoverVPN(ctx context.Context) VPNInfo {
 		info.Detected = true
 	}
 
-	// Extract VPN-related routes
-	routeInfo := discoverRoutes(ctx)
-	if routeInfo.Available {
-		info.Routes = filterVPNRoutes(routeInfo.Routes, info.Interfaces)
+	// Extract VPN-related routes from already-captured routing table
+	if routes.Available {
+		info.Routes = filterVPNRoutes(routes.Routes, info.Interfaces)
 	}
 
 	return info

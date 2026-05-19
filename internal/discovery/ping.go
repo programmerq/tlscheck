@@ -13,13 +13,11 @@ import (
 	"time"
 
 	"github.com/programmerq/tlscheck/internal/log"
+	"github.com/programmerq/tlscheck/internal/proxyconf"
 )
 
-// ProxySettings mirrors the subset of proxy configuration required for HTTP discovery.
-type ProxySettings struct {
-	HTTPSProxy string
-	HTTPProxy  string
-}
+// ProxySettings is an alias for proxyconf.Settings used in discovery HTTP requests.
+type ProxySettings = proxyconf.Settings
 
 // PingInfo represents the fields gathered from /webapi/ping.
 type PingInfo struct {

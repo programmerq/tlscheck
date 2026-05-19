@@ -10,6 +10,7 @@ import (
 
 	"github.com/programmerq/tlscheck/internal/config"
 	"github.com/programmerq/tlscheck/internal/log"
+	"github.com/programmerq/tlscheck/internal/sliceutil"
 )
 
 // Plan captures the probe blueprint derived from CLI inputs.
@@ -124,13 +125,13 @@ func Build(opts config.Options) (Plan, error) {
 			withProxy := target
 			withProxy.UseProxy = true
 			withProxy.ProxyURL = proxyURL
-			withProxy.Notes = append(cloneSlice(withProxy.Notes), "Using proxy: "+proxyURL)
+			withProxy.Notes = append(sliceutil.CloneStrings(withProxy.Notes), "Using proxy: "+proxyURL)
 			plan.Targets = append(plan.Targets, withProxy)
 
 			// Then, add the target without proxy
 			withoutProxy := target
 			withoutProxy.UseProxy = false
-			withoutProxy.Notes = append(cloneSlice(withoutProxy.Notes), "Direct connection (bypassing proxy)")
+			withoutProxy.Notes = append(sliceutil.CloneStrings(withoutProxy.Notes), "Direct connection (bypassing proxy)")
 			plan.Targets = append(plan.Targets, withoutProxy)
 		}
 	}
@@ -204,14 +205,14 @@ func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq
 			ServiceKey:     t.Key,
 			DisplayName:    t.DisplayName,
 			Address:        opts.PublicAddr,
-			OverrideIPs:    cloneSlice(opts.IPAddresses),
+			OverrideIPs:    sliceutil.CloneStrings(opts.IPAddresses),
 			Port:           port,
 			PrimarySNI:     primarySNI,
-			AdditionalSNIs: cloneSlice(additionalSNIs),
-			ALPNs:          cloneSlice(alpns),
+			AdditionalSNIs: sliceutil.CloneStrings(additionalSNIs),
+			ALPNs:          sliceutil.CloneStrings(alpns),
 			Trust:          trust,
 			Repeat:         opts.Repeat,
-			Notes:          cloneSlice(t.Notes),
+			Notes:          sliceutil.CloneStrings(t.Notes),
 		}
 
 		if t.NeedsUpgrade {
@@ -259,15 +260,6 @@ func (t serviceTemplate) instantiate(opts config.Options, base16Name string, seq
 	return targets
 }
 
-func cloneSlice(input []string) []string {
-	if len(input) == 0 {
-		return nil
-	}
-	out := make([]string, len(input))
-	copy(out, input)
-	return out
-}
-
 func cloneUpgrades(input []UpgradeAttempt) []UpgradeAttempt {
 	if len(input) == 0 {
 		return nil
@@ -291,12 +283,12 @@ func cloneMap(input map[string]string) map[string]string {
 // deepCopyProbeTarget creates a deep copy of a ProbeTarget, cloning all slice fields.
 func deepCopyProbeTarget(src ProbeTarget) ProbeTarget {
 	dst := src
-	dst.DNSResolvedIPs = cloneSlice(src.DNSResolvedIPs)
-	dst.OverrideIPs = cloneSlice(src.OverrideIPs)
-	dst.AdditionalSNIs = cloneSlice(src.AdditionalSNIs)
-	dst.ALPNs = cloneSlice(src.ALPNs)
+	dst.DNSResolvedIPs = sliceutil.CloneStrings(src.DNSResolvedIPs)
+	dst.OverrideIPs = sliceutil.CloneStrings(src.OverrideIPs)
+	dst.AdditionalSNIs = sliceutil.CloneStrings(src.AdditionalSNIs)
+	dst.ALPNs = sliceutil.CloneStrings(src.ALPNs)
 	dst.UpgradeSequence = cloneUpgrades(src.UpgradeSequence)
-	dst.Notes = cloneSlice(src.Notes)
+	dst.Notes = sliceutil.CloneStrings(src.Notes)
 	dst.ExtraHeaders = cloneMap(src.ExtraHeaders)
 	return dst
 }

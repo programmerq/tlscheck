@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/programmerq/tlscheck/internal/certutil"
+	"github.com/programmerq/tlscheck/internal/sliceutil"
 	"gopkg.in/yaml.v3"
 )
 
@@ -128,9 +130,9 @@ func loadProfileFile(home, name string) (Profile, error) {
 		Name:         name,
 		Username:     strings.TrimSpace(parsed.User),
 		PublicAddr:   publicAddr,
-		ClusterName:  strings.TrimSpace(firstNonEmpty(parsed.Cluster, name)),
+		ClusterName:  strings.TrimSpace(sliceutil.FirstNonEmpty(parsed.Cluster, name)),
 		Path:         path,
-		WebProxyAddr: strings.TrimSpace(firstNonEmpty(parsed.WebProxyAddr, parsed.SSHProxyAddr, parsed.PublicAddr)),
+		WebProxyAddr: strings.TrimSpace(sliceutil.FirstNonEmpty(parsed.WebProxyAddr, parsed.SSHProxyAddr, parsed.PublicAddr)),
 	}
 
 	if profile.WebProxyAddr == "" {
@@ -182,9 +184,9 @@ func loadFromProfilesYAML(home string) (Profile, error) {
 	profile := Profile{
 		Name:         entry.Name,
 		PublicAddr:   publicAddr,
-		ClusterName:  strings.TrimSpace(firstNonEmpty(entry.Cluster, entry.Name)),
+		ClusterName:  strings.TrimSpace(sliceutil.FirstNonEmpty(entry.Cluster, entry.Name)),
 		Path:         filepath.Join(home, fmt.Sprintf("%s.yaml", entry.Name)),
-		WebProxyAddr: strings.TrimSpace(firstNonEmpty(entry.WebProxyAddr, entry.ProxyURL, entry.PublicAddr)),
+		WebProxyAddr: strings.TrimSpace(sliceutil.FirstNonEmpty(entry.WebProxyAddr, entry.ProxyURL, entry.PublicAddr)),
 	}
 	if profile.WebProxyAddr == "" {
 		profile.WebProxyAddr = publicAddr
@@ -249,15 +251,6 @@ func normalizeHost(value string) string {
 	}
 
 	return value
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 // GetClientCertPaths returns the expected paths for client certificate and key files.
@@ -403,10 +396,10 @@ func parseCertificateMetadata(certPEM []byte) *certMetadata {
 	fingerprint := fmt.Sprintf("%X", sum[:])
 
 	// Parse key usage
-	keyUsages := parseKeyUsage(cert.KeyUsage)
+	keyUsages := certutil.ParseKeyUsage(cert.KeyUsage)
 
 	// Parse extended key usage
-	extKeyUsages := parseExtKeyUsage(cert.ExtKeyUsage)
+	extKeyUsages := certutil.ParseExtKeyUsage(cert.ExtKeyUsage)
 
 	// Convert IP addresses to strings
 	ipAddresses := make([]string, len(cert.IPAddresses))
@@ -448,73 +441,4 @@ func parseCertificateMetadata(certPEM []byte) *certMetadata {
 		IsCA:           cert.IsCA,
 		Extensions:     extensions,
 	}
-}
-
-func parseKeyUsage(usage x509.KeyUsage) []string {
-	var usages []string
-	if usage&x509.KeyUsageDigitalSignature != 0 {
-		usages = append(usages, "DigitalSignature")
-	}
-	if usage&x509.KeyUsageContentCommitment != 0 {
-		usages = append(usages, "ContentCommitment")
-	}
-	if usage&x509.KeyUsageKeyEncipherment != 0 {
-		usages = append(usages, "KeyEncipherment")
-	}
-	if usage&x509.KeyUsageDataEncipherment != 0 {
-		usages = append(usages, "DataEncipherment")
-	}
-	if usage&x509.KeyUsageKeyAgreement != 0 {
-		usages = append(usages, "KeyAgreement")
-	}
-	if usage&x509.KeyUsageCertSign != 0 {
-		usages = append(usages, "CertSign")
-	}
-	if usage&x509.KeyUsageCRLSign != 0 {
-		usages = append(usages, "CRLSign")
-	}
-	if usage&x509.KeyUsageEncipherOnly != 0 {
-		usages = append(usages, "EncipherOnly")
-	}
-	if usage&x509.KeyUsageDecipherOnly != 0 {
-		usages = append(usages, "DecipherOnly")
-	}
-	return usages
-}
-
-func parseExtKeyUsage(usage []x509.ExtKeyUsage) []string {
-	var usages []string
-	for _, u := range usage {
-		switch u {
-		case x509.ExtKeyUsageAny:
-			usages = append(usages, "Any")
-		case x509.ExtKeyUsageServerAuth:
-			usages = append(usages, "ServerAuth")
-		case x509.ExtKeyUsageClientAuth:
-			usages = append(usages, "ClientAuth")
-		case x509.ExtKeyUsageCodeSigning:
-			usages = append(usages, "CodeSigning")
-		case x509.ExtKeyUsageEmailProtection:
-			usages = append(usages, "EmailProtection")
-		case x509.ExtKeyUsageIPSECEndSystem:
-			usages = append(usages, "IPSECEndSystem")
-		case x509.ExtKeyUsageIPSECTunnel:
-			usages = append(usages, "IPSECTunnel")
-		case x509.ExtKeyUsageIPSECUser:
-			usages = append(usages, "IPSECUser")
-		case x509.ExtKeyUsageTimeStamping:
-			usages = append(usages, "TimeStamping")
-		case x509.ExtKeyUsageOCSPSigning:
-			usages = append(usages, "OCSPSigning")
-		case x509.ExtKeyUsageMicrosoftServerGatedCrypto:
-			usages = append(usages, "MicrosoftServerGatedCrypto")
-		case x509.ExtKeyUsageNetscapeServerGatedCrypto:
-			usages = append(usages, "NetscapeServerGatedCrypto")
-		case x509.ExtKeyUsageMicrosoftCommercialCodeSigning:
-			usages = append(usages, "MicrosoftCommercialCodeSigning")
-		case x509.ExtKeyUsageMicrosoftKernelCodeSigning:
-			usages = append(usages, "MicrosoftKernelCodeSigning")
-		}
-	}
-	return usages
 }

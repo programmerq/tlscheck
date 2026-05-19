@@ -6,6 +6,9 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/programmerq/tlscheck/internal/proxyconf"
+	"github.com/programmerq/tlscheck/internal/sliceutil"
 )
 
 // Output format constants
@@ -16,34 +19,30 @@ const (
 
 // Options captures runtime inputs supplied via the CLI.
 type Options struct {
-	PublicAddr        string            `json:"public_addr" jsonschema:"description=Public DNS name or IP address of the Teleport proxy server"`
-	ClusterName       string            `json:"cluster_name" jsonschema:"description=Teleport cluster name as reported by /webapi/ping"`
-	TeleportVersion   string            `json:"teleport_version" jsonschema:"description=Semantic version of the Teleport cluster (e.g. v18.0.0)"`
-	WebProxyPort      int               `json:"web_proxy_port,omitempty" jsonschema:"description=TCP port number for the Teleport proxy web listener (typically 443 or 3080)"`
-	TLSRoutingEnabled bool              `json:"tls_routing_enabled" jsonschema:"description=Whether TLS routing is enabled on the Teleport cluster (multiplexes all services on one port)"`
-	Repeat            int               `json:"repeat" jsonschema:"description=Number of probe attempts to execute per target combination"`
-	ServiceFilter     []string          `json:"service_filter,omitempty" jsonschema:"description=Optional list of service keys to probe (e.g. proxy_web, proxy_ssh). When empty, all services are probed"`
-	IPAddresses       []string          `json:"ip_addresses,omitempty" jsonschema:"description=Optional list of specific IP addresses to probe instead of DNS resolution"`
+	PublicAddr            string            `json:"public_addr" jsonschema:"description=Public DNS name or IP address of the Teleport proxy server"`
+	ClusterName           string            `json:"cluster_name" jsonschema:"description=Teleport cluster name as reported by /webapi/ping"`
+	TeleportVersion       string            `json:"teleport_version" jsonschema:"description=Semantic version of the Teleport cluster (e.g. v18.0.0)"`
+	WebProxyPort          int               `json:"web_proxy_port,omitempty" jsonschema:"description=TCP port number for the Teleport proxy web listener (typically 443 or 3080)"`
+	TLSRoutingEnabled     bool              `json:"tls_routing_enabled" jsonschema:"description=Whether TLS routing is enabled on the Teleport cluster (multiplexes all services on one port)"`
+	Repeat                int               `json:"repeat" jsonschema:"description=Number of probe attempts to execute per target combination"`
+	ServiceFilter         []string          `json:"service_filter,omitempty" jsonschema:"description=Optional list of service keys to probe (e.g. proxy_web, proxy_ssh). When empty, all services are probed"`
+	IPAddresses           []string          `json:"ip_addresses,omitempty" jsonschema:"description=Optional list of specific IP addresses to probe instead of DNS resolution"`
 	UseProfileCredentials bool              `json:"use_profile_credentials" jsonschema:"description=Whether to load and use client certificates from the tsh profile for mutual TLS probes"`
 	ExtraHeaders          map[string]string `json:"extra_headers,omitempty" jsonschema:"description=Extra HTTP headers to inject when connecting (e.g. Authorization). Each test runs both with and without these headers. Loaded from ~/.tsh/config.yaml add_headers or -H/--header flag"`
-	OutputFormat         string            `json:"output_format,omitempty" jsonschema:"description=Output format: html (default) or json"`
-	OutputFile           string            `json:"-"`
-	OutputFormatExplicit bool              `json:"-"`
-	Verbose              bool              `json:"verbose,omitempty" jsonschema:"description=Enable verbose logging to stderr for debugging"`
-	Proxy             ProxySettings     `json:"proxy" jsonschema:"description=HTTP/HTTPS proxy configuration detected from environment variables"`
-	ProfileSource     *ProfileInfo      `json:"profile_source,omitempty" jsonschema:"description=Information about the tsh profile used to populate default values"`
-	ClientCert        *ClientCertInfo   `json:"-"` // Client cert info moved to top-level client_certs
-	HostCAPEM         []byte            `json:"-"`
-	ClientCertPEM     []byte            `json:"-"`
-	ClientKeyPEM      []byte            `json:"-"`
+	OutputFormat          string            `json:"output_format,omitempty" jsonschema:"description=Output format: html (default) or json"`
+	OutputFile            string            `json:"-"`
+	OutputFormatExplicit  bool              `json:"-"`
+	Verbose               bool              `json:"verbose,omitempty" jsonschema:"description=Enable verbose logging to stderr for debugging"`
+	Proxy                 ProxySettings     `json:"proxy" jsonschema:"description=HTTP/HTTPS proxy configuration detected from environment variables"`
+	ProfileSource         *ProfileInfo      `json:"profile_source,omitempty" jsonschema:"description=Information about the tsh profile used to populate default values"`
+	ClientCert            *ClientCertInfo   `json:"-"` // Client cert info moved to top-level client_certs
+	HostCAPEM             []byte            `json:"-"`
+	ClientCertPEM         []byte            `json:"-"`
+	ClientKeyPEM          []byte            `json:"-"`
 }
 
 // ProxySettings captures HTTP(S) proxy configuration sourced from the environment.
-type ProxySettings struct {
-	HTTPSProxy string `json:"https_proxy,omitempty" jsonschema:"description=HTTPS proxy URL from HTTPS_PROXY environment variable"`
-	HTTPProxy  string `json:"http_proxy,omitempty" jsonschema:"description=HTTP proxy URL from HTTP_PROXY environment variable"`
-	NoProxy    string `json:"no_proxy,omitempty" jsonschema:"description=Comma-separated list of hosts to bypass proxy from NO_PROXY environment variable"`
-}
+type ProxySettings = proxyconf.Settings
 
 // ProfileInfo records the Teleport profile location used for automatic defaults.
 type ProfileInfo struct {
@@ -273,19 +272,10 @@ func splitList(value string, lowercase bool) []string {
 
 func detectProxySettings() ProxySettings {
 	return ProxySettings{
-		HTTPSProxy: firstNonEmpty(os.Getenv("HTTPS_PROXY"), os.Getenv("https_proxy")),
-		HTTPProxy:  firstNonEmpty(os.Getenv("HTTP_PROXY"), os.Getenv("http_proxy")),
-		NoProxy:    firstNonEmpty(os.Getenv("NO_PROXY"), os.Getenv("no_proxy")),
+		HTTPSProxy: sliceutil.FirstNonEmpty(os.Getenv("HTTPS_PROXY"), os.Getenv("https_proxy")),
+		HTTPProxy:  sliceutil.FirstNonEmpty(os.Getenv("HTTP_PROXY"), os.Getenv("http_proxy")),
+		NoProxy:    sliceutil.FirstNonEmpty(os.Getenv("NO_PROXY"), os.Getenv("no_proxy")),
 	}
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 // RedactHeaders returns a copy of the header map with sensitive values replaced

@@ -219,15 +219,6 @@ func (e *Engine) Run(ctx context.Context, p plan.Plan) ([]Result, error) {
 	return results, nil
 }
 
-func cloneSlice(input []string) []string {
-	if len(input) == 0 {
-		return nil
-	}
-	out := make([]string, len(input))
-	copy(out, input)
-	return out
-}
-
 func (e *Engine) probeOnce(ctx context.Context, target plan.ProbeTarget, attempt int) Result {
 	startTime := time.Now()
 	res := Result{
