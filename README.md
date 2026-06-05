@@ -14,7 +14,7 @@ plan marks non-web probes with `"informational_only": true` so failures on those
 not read as hard outages. Example:
 
 ```shell
-go run ./cmd/tlscheck > results.json
+go run ./cmd/tlscheck -o results.html
 ```
 
 The resulting JSON document contains several top-level keys:
